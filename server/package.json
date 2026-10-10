@@ -1,0 +1,17 @@
+{
+  "name": "phishguard-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PhishGuard analysis backend (Step 1: placeholder skeleton, no real AI calls).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
