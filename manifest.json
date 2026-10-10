@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "PhishGuard",
+  "version": "1.0.0",
+  "description": "Flags suspicious Gmail messages and explains common phishing signals.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://mail.google.com/*"],
+  "action": {
+    "default_title": "Analyze this email",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

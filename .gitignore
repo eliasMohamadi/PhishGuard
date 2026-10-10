@@ -1,0 +1,5 @@
+.idea/
+.mcp.json
+.env
+.env.*
+!.env.example

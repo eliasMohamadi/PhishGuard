@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhishGuard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div class="brand-mark">P</div>
+      <div>
+        <h1>PhishGuard</h1>
+        <p class="subtitle">Email threat check</p>
+      </div>
+    </header>
+
+    <section class="score-card" aria-live="polite">
+      <div class="score-ring" id="scoreRing">
+        <span id="score">--</span><small>/100</small>
+      </div>
+      <div class="score-copy">
+        <p class="eyebrow">PHISHING RISK</p>
+        <h2 id="verdict">Ready to scan</h2>
+        <p id="summary">Open an email in Gmail, then select Analyze.</p>
+      </div>
+    </section>
+
+    <button id="analyzeBtn" class="primary">Analyze open email</button>
+    <p id="status" class="status">Your email is analyzed locally by simple rules.</p>
+
+    <section class="results">
+      <h3>Signals detected</h3>
+      <ul id="reasons"><li class="empty">No analysis yet.</li></ul>
+    </section>
+
+    <footer>Heuristic estimate, not a guarantee. Verify sensitive requests through a trusted channel.</footer>
+  </main>
+  <script src="detector.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
