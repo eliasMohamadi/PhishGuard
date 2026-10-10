@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Overlay tests</title>
+  <!-- Loaded by tests/overlay.browser.test.js in headless Chrome. Results are written to
+       <body data-results>. Uses synthetic data only; no network. -->
+</head>
+<body>
+  <div role="main" style="position:absolute;inset:0;overflow:auto">
+    <div class="ha"><h2 class="hP">Synthetic subject</h2></div>
+    <div class="a3s aiL" id="msg">Synthetic body</div>
+  </div>
+  <script src="../../overlay.js"></script>
+  <script>
+    const results = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const anchor = document.getElementById("msg");
+    const shadow = () => document.getElementById("phishguard-overlay-host")?.shadowRoot;
+    const badgeText = () => shadow()?.querySelector(".badge")?.textContent || "";
+    const footerText = () => shadow()?.querySelector(".foot")?.textContent || "";
+    const result = (score, ai) => ({ score, verdict: "", reasons: ["Synthetic reason"], ai });
+    async function check(name, fn) {
+      try { await fn(); results.push({ name, ok: true }); }
+      catch (e) { results.push({ name, ok: false, error: String(e.message || e) }); }
+      PhishGuardOverlay.clear();
+    }
+    const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
+
+    (async () => {
+      await check("a slow result for an earlier email never appears on the next one", async () => {
+        PhishGuardOverlay.track("A", anchor, () => sleep(300).then(() => result(95)));
+        PhishGuardOverlay.track("B", anchor, () => sleep(50).then(() => result(10)));
+        await sleep(600);
+        expect(/Low risk 10%/.test(badgeText()), `badge: ${badgeText()}`);
+        expect(!/95/.test(badgeText()), "stale score shown");
+      });
+
+      await check("clearing while analysis is pending leaves nothing behind", async () => {
+        PhishGuardOverlay.track("C", anchor, () => sleep(100).then(() => result(80)));
+        PhishGuardOverlay.clear();
+        await sleep(300);
+        expect(!document.getElementById("phishguard-overlay-host"), "overlay re-appeared");
+      });
+
+      await check("the same key does not re-run the analysis", async () => {
+        let runs = 0;
+        const analyze = () => { runs++; return result(40); };
+        PhishGuardOverlay.track("D", anchor, analyze);
+        PhishGuardOverlay.track("D", anchor, analyze);
+        await sleep(50);
+        PhishGuardOverlay.track("D", anchor, analyze);
+        expect(runs === 1, `runs: ${runs}`);
+      });
+
+      await check("a stalled analysis ends in the error state after the guard", async () => {
+        PhishGuardOverlay.track("E", anchor, () => new Promise(() => {}), { aiEnabled: true });
+        await sleep(100);
+        expect(/AI review/.test(badgeText()), `loading badge: ${badgeText()}`);
+        await sleep(12500);
+        expect(/analysis unavailable/.test(badgeText()), `badge: ${badgeText()}`);
+      });
+
+      const footerFor = async (key, ai) => {
+        PhishGuardOverlay.track(key, anchor, () => result(40, ai));
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        return footerText();
+      };
+      await check("footer: AI off", async () => {
+        const t = await footerFor("F1", { status: "skipped", reason: "disabled" });
+        expect(/AI review is off/.test(t) && !/Checked with rules, inbox context and AI/.test(t), t);
+      });
+      await check("footer: AI not needed", async () => {
+        const t = await footerFor("F2", { status: "skipped", reason: "policy" });
+        expect(/wasn't needed/.test(t), t);
+      });
+      await check("footer: AI failed", async () => {
+        const t = await footerFor("F3", { status: "error", reason: "timeout" });
+        expect(/AI review was unavailable/.test(t), t);
+      });
+      await check("footer: AI reviewed", async () => {
+        const t = await footerFor("F4", { status: "ok", reason: null });
+        expect(/AI review \(Gemini/.test(t), t);
+      });
+      await check("footer: no ai field claims nothing", async () => {
+        const t = await footerFor("F5", undefined);
+        expect(/AI review is off/.test(t), t);
+      });
+      await check("footer: a forged ai status is not trusted", async () => {
+        const t = await footerFor("F6", { status: "reviewed-by-ai" });
+        expect(!/Gemini/.test(t), t);
+      });
+
+      document.body.dataset.results = JSON.stringify(results);
+    })();
+  </script>
+</body>
+</html>

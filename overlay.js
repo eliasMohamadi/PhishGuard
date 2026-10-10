@@ -9,6 +9,8 @@
   const HIGH = 60;
   const MEDIUM = 30;
   const CHART_MS = 800;
+  const ANALYSIS_TIMEOUT_MS = 12000;
+  const AI_STATUSES = ["ok", "skipped", "error"];
 
   // Signal categories. "rules" are detector.js reasons; the rest are context.js finding types.
   const CATEGORIES = {
@@ -150,8 +152,19 @@
       verdict: isText(result.verdict) ? result.verdict : "",
       reasons: result.reasons.filter(isText),
       findings: findings.filter(f => isText(f?.reason) && isText(f?.type) && Number.isFinite(f?.weight)),
-      ai: result.ai || null
+      ai: AI_STATUSES.includes(result.ai?.status)
+        ? { status: result.ai.status, reason: isText(result.ai.reason) ? result.ai.reason : null }
+        : null
     };
+  }
+
+  // Footer wording follows what actually happened; only status "ok" claims an AI review.
+  function aiStatusText(ai) {
+    const local = "Checked locally with rules and inbox context";
+    if (ai?.status === "ok") return "Checked with rules, inbox context and AI review (Gemini, via your PhishGuard server).";
+    if (ai?.status === "error") return `${local}. AI review was unavailable, so this is the local result.`;
+    if (ai?.status === "skipped" && ai.reason === "policy") return `${local}. AI review wasn't needed for this score.`;
+    return `${local}; AI review is off.`;
   }
 
   // Group the real reasons by where they came from. Counts here are genuine signal counts,
@@ -324,7 +337,11 @@
 
   function badgeText() {
     const { status, result } = state;
-    if (status === "loading") return ["PhishGuard: scanning…", "PhishGuard is analyzing this email"];
+    if (status === "loading") {
+      return state.aiEnabled
+        ? ["PhishGuard: scanning with AI review…", "PhishGuard is analyzing this email, including AI review"]
+        : ["PhishGuard: scanning…", "PhishGuard is analyzing this email"];
+    }
     if (status === "error") return ["PhishGuard: analysis unavailable", "PhishGuard could not analyze this email. Show details"];
     const { score } = result;
     const level = levelOf(score);
@@ -438,9 +455,8 @@
     const [act, detail] = recommendation(level, groups);
     sections.push(section("Recommended action", [el("div", { className: "action" }, [el("strong", { textContent: act }), el("p", { textContent: detail })])]));
 
-    const source = ai?.status === "ok" ? "Rules, inbox context and AI review." : "Checked locally with rules and inbox context; no AI review.";
     return [header(), el("div", { className: "body" }, sections),
-      el("footer", { className: "foot", textContent: `${source} A heuristic estimate, not a guarantee.` })];
+      el("footer", { className: "foot", textContent: `${aiStatusText(ai)} A heuristic estimate, not a guarantee.` })];
   }
 
   // Donut of signal counts per category. Slice angles are exactly count / total.
@@ -509,11 +525,17 @@
     current.chartPlayed = false;
     render();
     announce("PhishGuard is analyzing this email.");
-    Promise.resolve()
+    // Guard against a stalled analysis (e.g. a worker that never replies): show the error state
+    // rather than scanning forever. Longer than the detector's own 8 s AI timeout.
+    let guardTimer;
+    const guard = new Promise(resolve => { guardTimer = setTimeout(() => resolve(null), ANALYSIS_TIMEOUT_MS); });
+    const analysis = Promise.resolve()
       .then(() => current.analyze())
       .then(validResult)
-      .catch(() => null)
+      .catch(() => null);
+    Promise.race([analysis, guard])
       .then(result => {
+        clearTimeout(guardTimer);
         if (state !== current) return;
         current.status = result ? "done" : "error";
         current.result = result;
@@ -525,14 +547,16 @@
   }
 
   // Show the overlay for the email identified by key. Same key: just reposition.
-  function track(key, anchor, analyze) {
+  // options.aiEnabled only changes the loading label; the result's ai field says what happened.
+  function track(key, anchor, analyze, options = {}) {
     if (!key || !anchor) return clear();
     if (state?.key === key) {
       state.anchor = anchor;
       return schedulePosition();
     }
     mount();
-    state = { key, anchor, analyze, status: "loading", result: null, expanded: false, chartPlayed: false };
+    state = { key, anchor, analyze, aiEnabled: options.aiEnabled === true,
+      status: "loading", result: null, expanded: false, chartPlayed: false };
     run(state);
   }
 

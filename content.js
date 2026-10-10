@@ -136,13 +136,29 @@
     });
   }
 
-  // Rules plus inbox-context checks, all local. Async so a backend AI step can slot in later.
-  async function analyzeLocally(email) {
-    const detector = window.PhishGuardDetector;
-    const context = window.PhishGuardContext;
-    if (!detector) throw new Error("Detector not loaded");
-    const result = detector.analyzeEmail(email);
-    return context ? context.applyContext(result, context.analyzeContext(email, email.recentEmails)) : result;
+  // AI review is off until the user opts in from the popup (stored as aiReviewEnabled).
+  const AI_SETTING = "aiReviewEnabled";
+  const settingsStore = window.chrome?.storage?.local;
+  let aiEnabled = false;
+  let settingsReady = !settingsStore;
+
+  function sendToWorker(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, reply => {
+        if (chrome.runtime.lastError) reject(new Error("Background worker unavailable"));
+        else resolve(reply);
+      });
+    });
+  }
+
+  // Rules plus inbox-context checks, and AI review only when enabled; scoring is in detector.js.
+  function analyzeOpenEmail(email) {
+    return window.PhishGuardAnalysis.analyzeOpenEmail(email, {
+      detector: window.PhishGuardDetector,
+      context: window.PhishGuardContext,
+      aiEnabled,
+      sendMessage: sendToWorker
+    });
   }
 
   // Cheap identity for the open message, so unchanged views don't re-run the analysis.
@@ -167,9 +183,13 @@
     }
 
     const key = emailKey(message);
-    if (overlay) {
+    if (overlay && window.PhishGuardAnalysis) {
+      if (!settingsReady) return; // the AI setting is loading; scan once it's known
       // The overlay ignores repeated keys (it only repositions) and discards stale results.
-      overlay.track(key, message, () => analyzeLocally(readOpenEmail()));
+      // The AI setting is part of the key, so toggling it re-analyzes the open email.
+      const useAI = aiEnabled;
+      overlay.track(`${useAI ? "ai" : "local"}|${key}`, message,
+        () => analyzeOpenEmail(readOpenEmail()), { aiEnabled: useAI });
       return;
     }
 
@@ -193,6 +213,20 @@
     childList: true,
     subtree: true
   });
+
+  if (settingsStore) {
+    settingsStore.get(AI_SETTING)
+      .then(values => { aiEnabled = values?.[AI_SETTING] === true; })
+      .catch(() => { aiEnabled = false; })
+      .finally(() => { settingsReady = true; scanOpenEmail(); });
+    // Turning AI off applies to the next analysis; an in-flight result is discarded because
+    // the overlay key changes.
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local" || !changes[AI_SETTING]) return;
+      aiEnabled = changes[AI_SETTING].newValue === true;
+      scanOpenEmail();
+    });
+  }
 
   scanOpenEmail();
 

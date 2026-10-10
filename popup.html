@@ -30,6 +30,15 @@
     <button id="analyzeBtn" class="primary">Analyze open email</button>
     <p id="status" class="status">Your email is analyzed locally by simple rules.</p>
 
+    <section class="ai-optin" aria-labelledby="aiToggleLabel">
+      <label class="ai-toggle">
+        <input type="checkbox" id="aiToggle" aria-describedby="aiDisclosure">
+        <span id="aiToggleLabel">AI review in Gmail <em id="aiState">Off</em></span>
+      </label>
+      <p id="aiDisclosure" class="ai-note">When on, the open email's subject, sender, body and links, plus PhishGuard's short findings about it, are sent to your PhishGuard server on this computer (127.0.0.1:3000), which forwards them to Google Gemini. Your other inbox emails are never sent. When off, everything stays on this device.</p>
+      <p id="aiStatus" class="ai-note" aria-live="polite"></p>
+    </section>
+
     <section class="results">
       <h3>Signals detected</h3>
       <ul id="reasons"><li class="empty">No analysis yet.</li></ul>
