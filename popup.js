@@ -46,7 +46,7 @@ analyzeBtn.addEventListener("click", async () => {
       response = await requestEmail(tab.id);
     } catch (_) {
       // Tabs opened before the extension was installed or reloaded have no content script yet.
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["context.js", "content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["detector.js", "context.js", "overlay.js", "content.js"] });
       response = await requestEmail(tab.id);
     }
 

@@ -2,7 +2,7 @@
 :root {
   color-scheme: dark;
   --bg: #10141d; --panel: #191f2c; --border: #2a3445;
-  --text: #f2f5fb; --muted: #a6b0c2; --blue: #6b8cff;
+  --text: #f2f5fb; --muted: #a6b0c2; --blue: #6b95ff;
 }
 body { margin: 0; width: 360px; min-height: 440px; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; }
 .app { padding: 18px; }
