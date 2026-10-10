@@ -21,6 +21,7 @@
     google: ["google.com", "youtube.com"], apple: ["apple.com", "icloud.com"],
     paypal: ["paypal.com"], netflix: ["netflix.com"]
   };
+  const NO_SIGNS_REASON = "No obvious warning signs were detected by the basic rules.";
   const SHORTENERS = ["bit.ly", "tinyurl.com", "t.co", "rb.gy", "is.gd", "goo.gl", "ow.ly", "cutt.ly"];
 
   function extractUrls(text) {
@@ -96,7 +97,7 @@
       score += 10;
       reasons.push("Link domain differs from the sender's domain; this can be normal, but deserves a check.");
     }
-    if (!reasons.length) reasons.push("No obvious warning signs were detected by the basic rules.");
+    if (!reasons.length) reasons.push(NO_SIGNS_REASON);
 
     score = Math.min(100, score);
     return { score, verdict: verdictFor(score), reasons, urlCount: urls.length, strongEvidence };
@@ -131,8 +132,9 @@
     return true;
   }
 
-  // Blend rule and AI scores. With strong technical evidence AI can only raise the score;
-  // otherwise it may lower it (to correct generic-wording false positives) by at most maxAiReduction.
+  // Blend a local score (R, or L with includeContextScore) with the AI score. With strong evidence
+  // AI can only raise the score; otherwise it may lower it (to correct generic-wording false
+  // positives) by at most maxAiReduction.
   function combineScores(ruleScore, aiScore, strongEvidence, policy = DEFAULT_AI_POLICY) {
     const blended = Math.round((1 - policy.aiWeight) * ruleScore + policy.aiWeight * aiScore);
     const floor = strongEvidence ? ruleScore : ruleScore - policy.maxAiReduction;
@@ -166,21 +168,85 @@
     return { score: clampScore(data.score), reasons };
   }
 
+  // Local baseline L = min(100, R + C): rule score R plus the context adjustment C, each counted
+  // once. Mirrors context.js applyContext(), which is what the extension shows without AI.
+  function localBaseline(rules, findings) {
+    const contextScore = findings?.score ?? 0;
+    const ruleReasons = rules.reasons.filter(r => !(contextScore > 0 && r === NO_SIGNS_REASON));
+    return {
+      ruleScore: rules.score,
+      contextScore,
+      score: Math.min(100, rules.score + contextScore),
+      reasons: [...ruleReasons, ...(findings?.reasons || [])]
+    };
+  }
+
+  // Credible impersonation from context.js: the sender claims a known brand but mails from a
+  // domain that brand doesn't use. It's the only high-severity "sender" finding context.js emits
+  // (free-mail and unknown-sender findings are lower), and like a lookalike link it is checked
+  // against a fixed brand list rather than inferred from wording.
+  function hasStrongContextEvidence(context) {
+    return Array.isArray(context?.findings)
+      && context.findings.some(f => f?.type === "sender" && f?.severity === "high");
+  }
+
+  const aiFailure = code => Object.assign(new Error(code), { code });
+
   // Rule-based result optionally combined with a backend AI verdict. Never throws:
-  // any AI failure falls back to the rule result with ai.status "skipped" or "error".
-  // AI is only called when the rule score falls in the policy's uncertainty band.
+  // any AI failure falls back to the local result with ai.status "skipped" or "error".
+  //
+  // Default mode (unchanged contract): AI eligibility and blending use the rule score R only;
+  // context is sent to the backend but never scored.
+  //
+  // includeContextScore: true (one pipeline for rules + context + AI):
+  //   - eligibility and blending use L = min(100, R + C), so context counts exactly once;
+  //   - the result carries ruleScore, contextScore, localScore, context reasons, the context
+  //     object itself (as applyContext() does) and ai.reason, so a caller must not apply
+  //     context again afterwards;
+  //   - strong evidence (a suspicious link, or credible sender impersonation) keeps the score at
+  //     or above L: AI may raise it but not talk it down. Otherwise AI may lower it by at most
+  //     policy.maxAiReduction.
   async function analyzeEmailWithAI(email, options = {}) {
     const {
       context = null,
       endpoint = null,
       fetchImpl = typeof root.fetch === "function" ? (...args) => root.fetch(...args) : null,
-      timeoutMs = 8000
+      timeoutMs = 8000,
+      includeContextScore = false
     } = options;
     const policy = resolvePolicy(options.policy);
-    const { strongEvidence, ...rules } = evaluateRules(email);
-    const fallback = status => ({ ...rules, ruleScore: rules.score, ai: { status, score: null, reasons: [] } });
-    if (!endpoint || typeof fetchImpl !== "function") return fallback("skipped");
-    if (!shouldCallAI(rules.score, policy)) return fallback("skipped");
+    const { strongEvidence: strongRuleEvidence, ...rules } = evaluateRules(email);
+    const findings = normalizeContext(context);
+    const local = includeContextScore ? localBaseline(rules, findings) : null;
+    const baseScore = local ? local.score : rules.score;
+    const strongEvidence = strongRuleEvidence || (local !== null && hasStrongContextEvidence(context));
+
+    const finish = (score, ai) => {
+      if (!local) {
+        // Legacy shape, kept exactly for existing callers and tests.
+        const { reason, ...legacyAi } = ai;
+        return ai.status === "ok"
+          ? { score, verdict: verdictFor(score), reasons: [...rules.reasons, ...ai.reasons.map(r => `AI: ${r}`)],
+              urlCount: rules.urlCount, ruleScore: rules.score, ai: legacyAi }
+          : { ...rules, ruleScore: rules.score, ai: legacyAi };
+      }
+      const result = {
+        score,
+        verdict: verdictFor(score),
+        reasons: [...local.reasons, ...ai.reasons.map(r => `AI: ${r}`)],
+        urlCount: rules.urlCount,
+        ruleScore: local.ruleScore,
+        contextScore: local.contextScore,
+        localScore: local.score,
+        ai
+      };
+      if (context && typeof context === "object") result.context = context;
+      return result;
+    };
+    const fallback = (status, reason) => finish(baseScore, { status, score: null, reasons: [], reason });
+
+    if (!endpoint || typeof fetchImpl !== "function") return fallback("skipped", "disabled");
+    if (!shouldCallAI(baseScore, policy)) return fallback("skipped", "policy");
 
     const payload = {
       email: {
@@ -189,7 +255,7 @@
         body: String(email?.body || ""),
         links: Array.isArray(email?.links) ? email.links.filter(l => typeof l === "string") : []
       },
-      context: normalizeContext(context)
+      context: findings
     };
 
     const controller = typeof AbortController === "function" ? new AbortController() : null;
@@ -197,34 +263,36 @@
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
         controller?.abort();
-        reject(new Error("AI analysis timed out"));
+        reject(aiFailure("timeout"));
       }, timeoutMs);
     });
 
     try {
       const request = (async () => {
-        const response = await fetchImpl(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal: controller?.signal
-        });
-        if (!response?.ok) throw new Error(`AI backend returned ${response?.status}`);
-        return parseAiResponse(await response.json());
+        let response;
+        try {
+          response = await fetchImpl(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller?.signal
+          });
+        } catch (_) {
+          throw aiFailure("network_error");
+        }
+        if (!response?.ok) throw aiFailure("http_error");
+        try {
+          return parseAiResponse(await response.json());
+        } catch (_) {
+          throw aiFailure("invalid_response");
+        }
       })();
       request.catch(() => {}); // a late failure after a timeout is already handled
       const ai = await Promise.race([request, timeout]);
-      const score = combineScores(rules.score, ai.score, strongEvidence, policy);
-      return {
-        score,
-        verdict: verdictFor(score),
-        reasons: [...rules.reasons, ...ai.reasons.map(r => `AI: ${r}`)],
-        urlCount: rules.urlCount,
-        ruleScore: rules.score,
-        ai: { status: "ok", score: ai.score, reasons: ai.reasons }
-      };
-    } catch (_) {
-      return fallback("error");
+      const score = combineScores(baseScore, ai.score, strongEvidence, policy);
+      return finish(score, { status: "ok", score: ai.score, reasons: ai.reasons, reason: null });
+    } catch (err) {
+      return fallback("error", err?.code || "network_error");
     } finally {
       clearTimeout(timer);
     }

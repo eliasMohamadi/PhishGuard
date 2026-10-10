@@ -1,4 +1,4 @@
-// Run with: node --test tests/
+// Run with: node --test "tests/*.test.js"
 // Uses mocked backend responses only; no network or real AI calls.
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -279,4 +279,170 @@ test("combineScores respects policy weight and reduction settings", () => {
 
 test("analyzeEmail does not expose internal signals", () => {
   assert.equal("strongEvidence" in analyzeEmail(SHORTENER), false);
+});
+
+// --- One scoring pipeline: rules + context + AI (includeContextScore) ---
+const { analyzeContext, applyContext } = require("../context.js");
+
+const UNIFIED = { includeContextScore: true };
+const ctx = (score, extra = {}) => ({ score, reasons: [`Context finding worth ${score}`], ...extra });
+const IMPERSONATION = { type: "sender", weight: 20, severity: "high", reason: "Claims to be USPS but was sent from usps-help.example." };
+
+test("unified mode: AI eligibility uses L = R + C, not R", async () => {
+  // BENIGN: R = 0 (below band). With C = 25, L = 25 is inside the band.
+  const below = mockFetch(() => jsonResponse({ score: 25, reasons: [] }));
+  await analyzeEmailWithAI(BENIGN, { endpoint: ENDPOINT, fetchImpl: below.fetchImpl, context: ctx(25) });
+  assert.equal(below.calls.length, 0, "default mode still decides on R");
+  const unified = await analyzeEmailWithAI(BENIGN, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl: below.fetchImpl, context: ctx(25) });
+  assert.equal(below.calls.length, 1);
+  assert.equal(unified.ai.status, "ok");
+
+  // WORDING_ONLY: R = 47 (inside band). With C = 20, L = 67 is high risk: skipped by policy.
+  const above = mockFetch(() => jsonResponse({ score: 0, reasons: [] }));
+  const high = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl: above.fetchImpl, context: ctx(20) });
+  assert.equal(above.calls.length, 0);
+  assert.equal(high.score, 67);
+  assert.equal(high.verdict, "High risk");
+  assert.deepEqual(high.ai, { status: "skipped", score: null, reasons: [], reason: "policy" });
+});
+
+test("unified mode: context points are applied exactly once", async () => {
+  // L = 47 + 12 = 59. An AI score equal to L must leave it at 59 (no second +12).
+  const agree = mockFetch(() => jsonResponse({ score: 59, reasons: [] }));
+  const same = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl: agree.fetchImpl, context: ctx(12) });
+  assert.equal(same.score, 59);
+  assert.equal(same.ruleScore, 47);
+  assert.equal(same.contextScore, 12);
+  assert.equal(same.localScore, 59);
+
+  // Blend is against L: round(0.5*59 + 0.5*90) = 75.
+  const raise = mockFetch(() => jsonResponse({ score: 90, reasons: ["Unusual request"] }));
+  const raised = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl: raise.fetchImpl, context: ctx(12) });
+  assert.equal(raised.score, 75);
+  assert.equal(raised.verdict, "High risk");
+  assert.equal(raised.reasons.filter(r => r === "Context finding worth 12").length, 1);
+  assert.deepEqual(raised.reasons.slice(-1), ["AI: Unusual request"]);
+
+  // The backend still receives only the agreed { score, reasons } context shape.
+  assert.deepEqual(raise.calls[0].payload.context, { score: 12, reasons: ["Context finding worth 12"] });
+});
+
+test("unified mode: without strong evidence AI may lower L by at most maxAiReduction", async () => {
+  // L = 59, AI 0: blend 30, floor 59 - 25 = 34.
+  const { fetchImpl } = mockFetch(() => jsonResponse({ score: 0, reasons: ["Routine notice"] }));
+  const result = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(12) });
+  assert.equal(result.score, 34);
+  assert.equal(result.localScore, 59);
+});
+
+test("unified mode: a suspicious link keeps the score at or above L", async () => {
+  // SHORTENER: R = 48 with strong link evidence; C = 5 gives L = 53.
+  const { fetchImpl } = mockFetch(() => jsonResponse({ score: 0, reasons: ["Looks like a normal order"] }));
+  const result = await analyzeEmailWithAI(SHORTENER, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(5) });
+  assert.equal(result.score, 53);
+});
+
+test("unified mode: credible sender impersonation keeps the score at or above L", async () => {
+  // BENIGN: R = 0, C = 20 so L = 20 (inside band). AI says 0: blend would be 10.
+  const { fetchImpl } = mockFetch(() => jsonResponse({ score: 0, reasons: ["Looks fine"] }));
+  const impersonated = await analyzeEmailWithAI(BENIGN, {
+    ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(20, { findings: [IMPERSONATION] })
+  });
+  assert.equal(impersonated.score, 20);
+
+  // Same score from weaker findings (e.g. an unknown sender): AI may lower it.
+  const weak = await analyzeEmailWithAI(BENIGN, {
+    ...UNIFIED, endpoint: ENDPOINT, fetchImpl,
+    context: ctx(20, { findings: [{ type: "sender", weight: 8, severity: "medium", reason: "New sender." }] })
+  });
+  assert.equal(weak.score, 10);
+
+  // Default mode doesn't score context, so impersonation can't act as a floor there.
+  const legacy = await analyzeEmailWithAI(BENIGN, {
+    endpoint: ENDPOINT, fetchImpl, policy: ALWAYS_CALL_AI, context: ctx(20, { findings: [IMPERSONATION] })
+  });
+  assert.equal(legacy.score, 0);
+});
+
+test("unified mode: AI can raise a strong-evidence score", async () => {
+  const { fetchImpl } = mockFetch(() => jsonResponse({ score: 100, reasons: [] }));
+  const result = await analyzeEmailWithAI(BENIGN, {
+    ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(20, { findings: [IMPERSONATION] })
+  });
+  assert.equal(result.score, 60); // round(0.5*20 + 0.5*100)
+});
+
+test("unified mode: disabled or skipped AI returns exactly the local result", async () => {
+  const { fetchImpl, calls } = mockFetch(() => jsonResponse({ score: 0, reasons: [] }));
+  const disabled = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, fetchImpl, context: ctx(12) });
+  assert.equal(calls.length, 0);
+  assert.equal(disabled.score, 59);
+  assert.deepEqual(disabled.ai, { status: "skipped", score: null, reasons: [], reason: "disabled" });
+
+  const capped = await analyzeEmailWithAI(PHISHING, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(40) });
+  assert.equal(calls.length, 0);
+  assert.equal(capped.score, 100);
+  assert.equal(capped.localScore, 100);
+  assert.equal(capped.ai.reason, "policy");
+});
+
+for (const [name, handler, reason, timeoutMs] of [
+  ["HTTP error", () => jsonResponse({ error: "boom" }, 503), "http_error"],
+  ["non-numeric score", () => jsonResponse({ score: "high", reasons: [] }), "invalid_response"],
+  ["malformed JSON", () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError("bad"); } }), "invalid_response"],
+  ["network failure", () => { throw new TypeError("Failed to fetch"); }, "network_error"],
+  ["timeout", () => new Promise(() => {}), "timeout", 20]
+]) {
+  test(`unified mode: ${name} keeps the local score and findings with ai.reason "${reason}"`, async () => {
+    const { fetchImpl } = mockFetch(handler);
+    const context = ctx(12);
+    const result = await analyzeEmailWithAI(WORDING_ONLY, { ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context, timeoutMs });
+    assert.equal(result.score, 59);
+    assert.equal(result.verdict, "Use caution");
+    assert.deepEqual(result.ai, { status: "error", score: null, reasons: [], reason });
+    assert.deepEqual(result.reasons, [...analyzeEmail(WORDING_ONLY).reasons, "Context finding worth 12"]);
+    assert.equal(result.context, context);
+  });
+}
+
+test("unified mode without AI matches context.js applyContext() on real context output", async () => {
+  const email = {
+    subject: "USPS: Delivery failed",
+    sender: "USPS <alerts@usps-redeliver.top>",
+    body: "Pay a small fee to redeliver your package: http://usps-redeliver.top/pay",
+    links: ["http://usps-redeliver.top/pay"]
+  };
+  const recent = [{ sender: "friend@example.com", subject: "Lunch", snippet: "See you" }];
+  const context = analyzeContext(email, recent);
+  const expected = applyContext(analyzeEmail(email), context);
+  const result = await analyzeEmailWithAI(email, { ...UNIFIED, context });
+  for (const key of ["score", "verdict", "reasons", "urlCount", "context"]) {
+    assert.deepEqual(result[key], expected[key], key);
+  }
+  assert.equal(result.localScore, expected.score);
+  assert.equal(result.localScore, Math.min(100, result.ruleScore + result.contextScore));
+
+  // With no context points the "no obvious signs" reason stays, as applyContext keeps it.
+  const quiet = analyzeContext(BENIGN, []);
+  const quietResult = await analyzeEmailWithAI(BENIGN, { ...UNIFIED, context: quiet });
+  assert.deepEqual(quietResult.reasons, applyContext(analyzeEmail(BENIGN), quiet).reasons);
+});
+
+test("unified mode never sends context findings or inbox data to the backend", async () => {
+  const { fetchImpl, calls } = mockFetch(() => jsonResponse({ score: 20, reasons: [] }));
+  await analyzeEmailWithAI({ ...BENIGN, recentEmails: [{ subject: "private" }] }, {
+    ...UNIFIED, endpoint: ENDPOINT, fetchImpl, context: ctx(20, { findings: [IMPERSONATION], recentCount: 3 })
+  });
+  assert.deepEqual(calls[0].payload, {
+    email: BENIGN,
+    context: { score: 20, reasons: ["Context finding worth 20"] }
+  });
+});
+
+test("default mode keeps its exact shape: no new metadata, context unscored", async () => {
+  const { fetchImpl } = mockFetch(() => jsonResponse({ score: 47, reasons: [] }));
+  const result = await analyzeEmailWithAI(WORDING_ONLY, { endpoint: ENDPOINT, fetchImpl, context: ctx(12) });
+  assert.deepEqual(Object.keys(result).sort(), ["ai", "reasons", "ruleScore", "score", "urlCount", "verdict"]);
+  assert.deepEqual(Object.keys(result.ai).sort(), ["reasons", "score", "status"]);
+  assert.equal(result.score, 47);
 });
