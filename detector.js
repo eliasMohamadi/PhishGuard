@@ -96,10 +96,103 @@
     if (!reasons.length) reasons.push("No obvious warning signs were detected by the basic rules.");
 
     score = Math.min(100, score);
-    const verdict = score >= 60 ? "High risk" : score >= 30 ? "Use caution" : "Lower risk";
-    return { score, verdict, reasons, urlCount: urls.length };
+    return { score, verdict: verdictFor(score), reasons, urlCount: urls.length };
   }
 
-  if (typeof module !== "undefined" && module.exports) module.exports = { analyzeEmail, extractUrls };
-  root.PhishGuardDetector = { analyzeEmail, extractUrls };
+  function verdictFor(score) {
+    return score >= 60 ? "High risk" : score >= 30 ? "Use caution" : "Lower risk";
+  }
+
+  const AI_MAX_REASONS = 5;
+  const AI_MAX_REASON_LENGTH = 200;
+
+  function clampScore(n) {
+    return Math.max(0, Math.min(100, Math.round(n)));
+  }
+
+  // Keep only the agreed ContextFindings shape: { score?: 0-100, reasons: string[] }.
+  function normalizeContext(context) {
+    if (!context || typeof context !== "object") return null;
+    const findings = {
+      reasons: Array.isArray(context.reasons) ? context.reasons.filter(r => typeof r === "string") : []
+    };
+    if (Number.isFinite(context.score)) findings.score = clampScore(context.score);
+    return findings;
+  }
+
+  // Backend output is untrusted (the email itself may try to steer the model), so validate and cap it.
+  function parseAiResponse(data) {
+    if (!Number.isFinite(data?.score)) throw new Error("Invalid AI response");
+    const reasons = (Array.isArray(data.reasons) ? data.reasons : [])
+      .filter(r => typeof r === "string" && r.trim())
+      .slice(0, AI_MAX_REASONS)
+      .map(r => r.trim().slice(0, AI_MAX_REASON_LENGTH));
+    return { score: clampScore(data.score), reasons };
+  }
+
+  // Rule-based result optionally combined with a backend AI verdict. Never throws:
+  // any AI failure falls back to the rule result with ai.status "skipped" or "error".
+  async function analyzeEmailWithAI(email, options = {}) {
+    const {
+      context = null,
+      endpoint = null,
+      fetchImpl = typeof root.fetch === "function" ? (...args) => root.fetch(...args) : null,
+      timeoutMs = 8000
+    } = options;
+    const rules = analyzeEmail(email);
+    const fallback = status => ({ ...rules, ruleScore: rules.score, ai: { status, score: null, reasons: [] } });
+    if (!endpoint || typeof fetchImpl !== "function") return fallback("skipped");
+
+    const payload = {
+      email: {
+        subject: String(email?.subject || ""),
+        sender: String(email?.sender || ""),
+        body: String(email?.body || ""),
+        links: Array.isArray(email?.links) ? email.links.filter(l => typeof l === "string") : []
+      },
+      context: normalizeContext(context)
+    };
+
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller?.abort();
+        reject(new Error("AI analysis timed out"));
+      }, timeoutMs);
+    });
+
+    try {
+      const request = (async () => {
+        const response = await fetchImpl(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller?.signal
+        });
+        if (!response?.ok) throw new Error(`AI backend returned ${response?.status}`);
+        return parseAiResponse(await response.json());
+      })();
+      request.catch(() => {}); // a late failure after a timeout is already handled
+      const ai = await Promise.race([request, timeout]);
+      // AI can raise the rule score but never lower it.
+      const score = Math.max(rules.score, Math.round((rules.score + ai.score) / 2));
+      return {
+        score,
+        verdict: verdictFor(score),
+        reasons: [...rules.reasons, ...ai.reasons.map(r => `AI: ${r}`)],
+        urlCount: rules.urlCount,
+        ruleScore: rules.score,
+        ai: { status: "ok", score: ai.score, reasons: ai.reasons }
+      };
+    } catch (_) {
+      return fallback("error");
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const api = { analyzeEmail, analyzeEmailWithAI, extractUrls };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  root.PhishGuardDetector = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
