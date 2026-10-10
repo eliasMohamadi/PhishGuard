@@ -37,16 +37,29 @@ analyzeBtn.addEventListener("click", async () => {
   statusEl.textContent = "Analyzing the open Gmail message…";
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !tab.url?.startsWith("https://mail.google.com/")) {
-      throw new Error("Open Gmail in this tab, open an email, then try again.");
+    if (
+        !tab?.id ||
+        !(
+            tab.url?.startsWith("https://mail.google.com/") ||
+            tab.url?.startsWith("https://outlook.live.com/") ||
+            tab.url?.startsWith("https://outlook.office.com/") ||
+            tab.url?.startsWith("https://outlook.office365.com/")
+        )
+    ) {
+      throw new Error("Open an email in Gmail or Outlook, then try again.");
     }
 
     let response;
     try {
       response = await requestEmail(tab.id);
     } catch (_) {
+      // enables plug in to be used on outlook
+      const reader = tab.url.startsWith("https://outlook.office.com/")
+          ? "outlook-reader.js"
+          : "content.js";
       // Tabs opened before the extension was installed or reloaded have no content script yet.
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [reader]
+      });
       response = await requestEmail(tab.id);
     }
 
