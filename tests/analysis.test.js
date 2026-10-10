@@ -64,7 +64,7 @@ test("AI on: blended against L once, context reasons once, inbox rows never sent
   assert.equal(result.localScore, 53);
   assert.equal(result.ruleScore, 33);
   assert.equal(result.contextScore, 20);
-  assert.equal(result.score, 72); // round(0.5*53 + 0.5*91); context is not added again
+  assert.equal(result.score, 80); // round(0.3*53 + 0.7*91); context is not added again
   for (const reason of result.context.reasons) {
     assert.equal(result.reasons.filter(r => r === reason).length, 1, reason);
   }

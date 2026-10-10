@@ -32,7 +32,7 @@ test("overlay behaviour in a real DOM", { skip: chrome ? false : "Chrome not fou
     const match = html.match(/data-results="([^"]*)"/);
     assert.ok(match, "the test page did not finish");
     const results = JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
-    assert.ok(results.length >= 10, `only ${results.length} checks ran`);
+    assert.ok(results.length >= 16, `only ${results.length} checks ran`);
     const failed = results.filter(r => !r.ok);
     assert.deepEqual(failed, [], failed.map(f => `${f.name}: ${f.error}`).join("\n"));
   } finally {

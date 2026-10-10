@@ -11,6 +11,14 @@
     <div class="ha"><h2 class="hP">Synthetic subject</h2></div>
     <div class="a3s aiL" id="msg">Synthetic body</div>
   </div>
+  <script>
+    // Count the overlay's document-level pointerdown listeners, to catch duplicates.
+    window.pointerListeners = 0;
+    const add = document.addEventListener.bind(document);
+    const remove = document.removeEventListener.bind(document);
+    document.addEventListener = (type, ...rest) => { if (type === "pointerdown") pointerListeners++; return add(type, ...rest); };
+    document.removeEventListener = (type, ...rest) => { if (type === "pointerdown") pointerListeners--; return remove(type, ...rest); };
+  </script>
   <script src="../../overlay.js"></script>
   <script>
     const results = [];
@@ -90,6 +98,91 @@
       await check("footer: a forged ai status is not trusted", async () => {
         const t = await footerFor("F6", { status: "reviewed-by-ai" });
         expect(!/Gemini/.test(t), t);
+      });
+
+      // --- Click outside to dismiss ---
+      const press = target => {
+        const event = new PointerEvent("pointerdown", { bubbles: true, composed: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event;
+      };
+      const isOpen = () => shadow()?.querySelector(".badge")?.getAttribute("aria-expanded") === "true"
+        && !shadow().querySelector(".panel").hidden;
+      const openPanel = async key => {
+        PhishGuardOverlay.track(key, anchor, () => result(40));
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        expect(isOpen(), "panel did not open");
+      };
+
+      await check("a press outside the overlay collapses the panel without blocking Gmail", async () => {
+        await openPanel("O1");
+        let gmailSaw = 0;
+        const gmailHandler = () => gmailSaw++;
+        anchor.addEventListener("pointerdown", gmailHandler);
+        document.body.addEventListener("pointerdown", gmailHandler);
+        const event = press(anchor);
+        anchor.removeEventListener("pointerdown", gmailHandler);
+        document.body.removeEventListener("pointerdown", gmailHandler);
+        expect(!isOpen(), "panel still open");
+        expect(shadow().querySelector(".badge"), "badge removed; should collapse, not remove");
+        expect(!event.defaultPrevented, "outside press was cancelled");
+        expect(gmailSaw === 2, `Gmail handlers ran ${gmailSaw} times, expected 2`);
+      });
+
+      await check("an outside press doesn't move focus to the badge", async () => {
+        await openPanel("O2");
+        press(document.querySelector("h2.hP"));
+        expect(shadow().activeElement !== shadow().querySelector(".badge"), "focus moved to the badge");
+      });
+
+      await check("presses inside the panel keep it open", async () => {
+        await openPanel("I1");
+        for (const selector of [".panel", ".head", "#pg-title", ".body", ".score", ".meter", ".group li", ".action", ".foot"]) {
+          const target = shadow().querySelector(selector);
+          expect(target, `missing ${selector}`);
+          press(target);
+          expect(isOpen(), `closed after pressing ${selector}`);
+        }
+      });
+
+      await check("the close button and Escape still collapse the panel", async () => {
+        await openPanel("I2");
+        shadow().querySelector(".close").click();
+        expect(!isOpen(), "close button didn't collapse");
+        shadow().querySelector(".badge").click();
+        shadow().querySelector(".panel").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        expect(!isOpen(), "Escape didn't collapse");
+      });
+
+      await check("an outside press while collapsed changes nothing", async () => {
+        PhishGuardOverlay.track("C1", anchor, () => result(40));
+        await sleep(50);
+        press(anchor);
+        expect(!isOpen() && /Caution 40%/.test(badgeText()), `badge: ${badgeText()}`);
+      });
+
+      await check("dismissal keeps working after reopening and across emails, with one listener", async () => {
+        await openPanel("R1");
+        for (let i = 0; i < 3; i++) {
+          press(anchor);
+          expect(!isOpen(), `round ${i}: not dismissed`);
+          shadow().querySelector(".badge").click();
+          expect(isOpen(), `round ${i}: didn't reopen`);
+        }
+        expect(pointerListeners === 1, `listeners while mounted: ${pointerListeners}`);
+        PhishGuardOverlay.track("R2", anchor, () => result(70)); // switch email
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        press(anchor);
+        expect(!isOpen(), "not dismissed after switching email");
+        expect(pointerListeners === 1, `listeners after switching: ${pointerListeners}`);
+        PhishGuardOverlay.clear();
+        expect(pointerListeners === 0, `listeners after clear: ${pointerListeners}`);
+        await openPanel("R3"); // remount
+        expect(pointerListeners === 1, `listeners after remount: ${pointerListeners}`);
+        press(anchor);
+        expect(!isOpen(), "not dismissed after remount");
       });
 
       document.body.dataset.results = JSON.stringify(results);

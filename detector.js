@@ -118,7 +118,7 @@
     uncertainMin: 20,      // rule scores below this skip AI (likely benign; saves cost and latency)
     uncertainMax: 59,      // rule scores above this are high risk and warn immediately
     verifyHighRisk: false, // true = also ask AI about high-risk emails
-    aiWeight: 0.5,         // share of the AI score in the blend (0 = rules only, 1 = AI only)
+    aiWeight: 0.7,         // share of the AI score in the blend (0 = local only, 1 = AI only)
     maxAiReduction: 25     // most points AI may subtract when there is no strong evidence
   });
 

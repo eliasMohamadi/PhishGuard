@@ -284,12 +284,15 @@
     });
     addEventListener("resize", schedulePosition);
     addEventListener("scroll", schedulePosition, { capture: true, passive: true });
+    // One listener per mount (mount() returns early if already mounted); removed in unmount().
+    document.addEventListener("pointerdown", onOutsidePointer, { capture: true, passive: true });
   }
 
   function unmount() {
     if (!host) return;
     removeEventListener("resize", schedulePosition);
     removeEventListener("scroll", schedulePosition, { capture: true });
+    document.removeEventListener("pointerdown", onOutsidePointer, { capture: true });
     cancelAnimationFrame(frame);
     cancelAnimationFrame(chartFrame);
     host.remove();
@@ -327,12 +330,22 @@
     });
   }
 
-  function setExpanded(expanded) {
+  // restoreFocus: false when the user dismissed by clicking elsewhere, so focus stays where they clicked.
+  function setExpanded(expanded, { restoreFocus = true } = {}) {
     if (!state || (expanded && state.status === "loading")) return;
     state.expanded = expanded;
     render();
     if (expanded) parts.panel.querySelector(".close")?.focus();
-    else parts.badge.focus();
+    else if (restoreFocus) parts.badge.focus();
+  }
+
+  // Collapse the panel when the user presses anywhere outside the overlay. Events from inside the
+  // shadow root are retargeted to the host, so composedPath() tells inside from outside. Capture
+  // phase so Gmail's own handlers can't hide the event from us; we never cancel or stop it.
+  function onOutsidePointer(event) {
+    if (!state?.expanded || !host) return;
+    if (event.composedPath().includes(host)) return;
+    setExpanded(false, { restoreFocus: false });
   }
 
   function badgeText() {
