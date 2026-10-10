@@ -46,12 +46,16 @@ analyzeBtn.addEventListener("click", async () => {
       response = await requestEmail(tab.id);
     } catch (_) {
       // Tabs opened before the extension was installed or reloaded have no content script yet.
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["context.js", "content.js"] });
       response = await requestEmail(tab.id);
     }
 
     if (!response?.ok) throw new Error(response?.error || "Could not read the open email.");
-    const result = PhishGuardDetector.analyzeEmail(response.email);
+    const email = response.email;
+    const result = PhishGuardContext.applyContext(
+      PhishGuardDetector.analyzeEmail(email),
+      PhishGuardContext.analyzeContext(email, email.recentEmails)
+    );
     renderResult(result);
     statusEl.textContent = "Scanned locally. Email content was not sent to an AI service.";
   } catch (error) {

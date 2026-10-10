@@ -51,7 +51,10 @@
           .filter(href => /^https?:/i.test(href))
       : [];
 
-    return { subject, sender, body, links };
+    // Other inbox rows let the context checks see whether recent mail backs up this email.
+    const recentEmails = window.PhishGuardContext?.readRecentEmails(document) || [];
+
+    return { subject, sender, body, links, recentEmails };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
