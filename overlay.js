@@ -70,7 +70,22 @@
     }
     .panel[hidden] { display: none; }
     .head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--line); }
-    .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; flex: none; }
+    .logo {
+  width: 65px;
+  height: 65px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: none;
+}
+
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
     .head h2 { margin: 0; flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
     .close { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: #444746; font-size: 20px; line-height: 1; }
     .close:hover { background: #f1f3f4; }
@@ -395,10 +410,31 @@
     const close = el("button", { className: "close", type: "button", textContent: "×", title: "Close (Esc)" });
     close.setAttribute("aria-label", "Close PhishGuard details");
     close.addEventListener("click", () => setExpanded(false));
-    const logo = el("span", { className: "logo", textContent: "P" });
+    const logo = el("span", { className: "logo" });
+    const logoImg = el("img", {
+      src: chrome.runtime.getURL("prototype/PhishGuardLogo.png"),
+      alt: ""
+    });
+
+    logoImg.style.width = "70%";
+    logoImg.style.height = "70%";
+    logoImg.style.objectFit = "contain";
+    logoImg.style.maxWidth = "100%";
+    logoImg.style.maxHeight = "100%";
+
+    logo.appendChild(logoImg);
     logo.setAttribute("aria-hidden", "true");
-    return el("header", { className: "head" }, [logo, el("h2", { id: "pg-title", textContent: "PhishGuard security check" }), close]);
+
+    return el("header", { className: "head" }, [
+      logo,
+      el("h2", {
+        id: "pg-title",
+        textContent: "PhishGuard Security Check"
+      }),
+      close
+    ]);
   }
+
 
   function section(title, children) {
     return el("section", {}, [el("h3", { textContent: title }), ...children]);

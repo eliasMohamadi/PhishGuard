@@ -19,5 +19,11 @@
       "js": ["detector.js", "context.js", "analysis.js", "overlay.js", "content.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["prototype/PhishGuardLogo.png"],
+      "matches": ["https://mail.google.com/*"]
+    }
   ]
 }
