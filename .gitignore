@@ -7,3 +7,6 @@
 server/ .env
 server/.env
 node_modules/
+
+# macOS metadata
+.DS_Store

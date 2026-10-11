@@ -264,7 +264,7 @@ if (require.main === module) {
   // Variables already set in the shell take precedence over the file.
   require("dotenv").config({ path: require("node:path").join(__dirname, ".env"), quiet: true });
   const port = Number(process.env.PORT) || 3000;
-  const host = process.env.HOST || "127.0.0.1";
+  const host = process.env.HOST || "0.0.0.0";
   const { GEMINI_API_KEY: apiKey, GEMINI_MODEL: model } = process.env;
   if (!apiKey || !model) {
     console.warn("GEMINI_API_KEY or GEMINI_MODEL is not set; /analyze will return 503 until both are configured.");

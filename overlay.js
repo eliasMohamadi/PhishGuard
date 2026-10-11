@@ -63,14 +63,25 @@
     .badge[aria-expanded="true"] { visibility: hidden; }
 
     .panel {
-      position: fixed; display: flex; flex-direction: column; overflow: hidden;
+      position: fixed; overflow-y: auto; overscroll-behavior: contain;
       background: #fff; border: 1px solid #dadce0; border-radius: 16px;
       box-shadow: 0 12px 32px rgba(60,64,67,.24), 0 2px 6px rgba(60,64,67,.12);
       transform-origin: top right; animation: open .2s cubic-bezier(.2,0,0,1);
     }
     .panel[hidden] { display: none; }
-    .head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--line); }
-    .logo {
+.head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
   width: 65px;
   height: 65px;
   border-radius: 6px;
@@ -89,11 +100,11 @@
     .head h2 { margin: 0; flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
     .close { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: #444746; font-size: 20px; line-height: 1; }
     .close:hover { background: #f1f3f4; }
-    .body { padding: 4px 20px 20px; overflow: auto; flex: 1; }
+    .body { padding: 4px 20px 20px; }
     .foot { padding: 10px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
 
-    section { padding-top: 16px; }
-    section + section { margin-top: 16px; border-top: 1px solid var(--line); }
+    .body section { padding-top: 16px; }
+    .body section + section { margin-top: 16px; border-top: 1px solid var(--line); }
     h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 
     .overall { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -240,12 +251,29 @@
     return !!node && node.getClientRects().length > 0;
   }
 
-  // The reading area is Gmail's main region; fall back to the viewport.
+  // The part of the reading area the user can actually see: Gmail's main region, intersected with
+  // every ancestor that clips or scrolls it and with the viewport. [role="main"] alone isn't enough:
+  // when it's tall content inside a separate scroller, its box extends above and below the visible
+  // pane, and a fixed-position overlay sized from it would float over the header or off-screen.
   function areaRect(anchor) {
-    const r = anchor?.closest?.('[role="main"]')?.getBoundingClientRect();
-    return r && r.width > 0 && r.height > 0
-      ? r
-      : { top: 0, left: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
+    const doc = document.documentElement;
+    let top = 0;
+    let left = 0;
+    let right = doc.clientWidth;
+    let bottom = doc.clientHeight;
+    const clip = r => {
+      top = Math.max(top, r.top);
+      left = Math.max(left, r.left);
+      right = Math.min(right, r.right);
+      bottom = Math.min(bottom, r.bottom);
+    };
+    const main = anchor?.closest?.('[role="main"]');
+    if (main) clip(main.getBoundingClientRect());
+    for (let el = anchor?.parentElement; el && el !== document.body && el !== doc; el = el.parentElement) {
+      const { overflowX, overflowY } = getComputedStyle(el);
+      if (overflowX !== "visible" || overflowY !== "visible") clip(el.getBoundingClientRect());
+    }
+    return { top, left, right, bottom, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
   }
 
   // Preferred badge spot: the subject row, right-aligned but left of any Gmail controls in that
@@ -266,7 +294,7 @@
       if (r.width && r.left >= textRight && r.bottom > s.top && r.top < s.bottom) right = Math.min(right, r.left - gap);
     }
     if (right - badgeW < textRight + gap) return null;
-    return { top: s.top + (s.height - badgeH) / 2, right };
+    return { top: s.top + (s.height - badgeH) / 2, right, rowTop: s.top, rowBottom: s.bottom };
   }
 
   let host = null;
@@ -330,18 +358,28 @@
     const rightLimit = area.right - 2 * gap; // clear of the reading area's scrollbar
     const bw = badge.offsetWidth;
     const bh = badge.offsetHeight;
+    // Visible pane too small for the badge (e.g. collapsed): hide it rather than draw it elsewhere.
+    parts.wrap.style.visibility = area.height >= bh + 2 * gap && area.width >= bw + 2 * gap ? "" : "hidden";
     const spot = subjectSpot(state.anchor, rightLimit, bw, bh, gap)
       || { top: state.anchor.getBoundingClientRect().top, right: rightLimit };
-    const top = Math.min(Math.max(spot.top, area.top + gap), area.bottom - bh - gap);
+    // Centered on the subject row while that row is fully visible; once it scrolls out of the pane,
+    // pinned just inside the pane so it never floats over Gmail's header or off-screen.
+    const rowVisible = spot.rowTop !== undefined && spot.rowTop >= area.top - 1 && spot.rowBottom <= area.bottom + 1;
+    const top = rowVisible ? spot.top : Math.min(Math.max(spot.top, area.top + gap), area.bottom - bh - gap);
     Object.assign(badge.style, { top: `${top}px`, right: `${viewW - spot.right}px` });
 
-    const width = Math.min(640, area.width - 3 * gap, Math.max(area.width * 0.65, 300));
-    const panelTop = Math.max(Math.min(top, area.bottom - 240), area.top + gap);
+    // Panel: about two-thirds of the pane's width, and a height that always fits inside the pane
+    // (up to 70% of it, more on short panes), moved up if needed so its bottom stays visible and its
+    // own scrollbar can reach the end of the content.
+    const width = Math.max(0, Math.min(640, area.width - 3 * gap, Math.max(area.width * 0.65, 300)));
+    const available = Math.max(0, area.height - 2 * gap);
+    const height = Math.min(available, Math.max(area.height * 0.7, 320));
+    const panelTop = Math.max(area.top + gap, Math.min(top, area.bottom - gap - height));
     Object.assign(panel.style, {
       top: `${panelTop}px`,
       right: `${viewW - rightLimit}px`,
       width: `${width}px`,
-      maxHeight: `${Math.max(220, Math.min(area.bottom - panelTop - gap, area.height * 0.7))}px`
+      maxHeight: `${height}px`
     });
   }
 
