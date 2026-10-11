@@ -10,6 +10,16 @@
   const MEDIUM = 30;
   const CHART_MS = 800;
   const ANALYSIS_TIMEOUT_MS = 12000;
+  const LOGO_PATH = "assets/PhishGuardLogo.png"; // listed in manifest web_accessible_resources
+
+  // chrome-extension:// URL for a packaged file, or null outside an extension context.
+  function extensionUrl(path) {
+    try {
+      return root.chrome?.runtime?.getURL?.(path) || null;
+    } catch (_) {
+      return null;
+    }
+  }
   const AI_STATUSES = ["ok", "skipped", "error"];
 
   // Signal categories. "rules" are detector.js reasons; the rest are context.js finding types.
@@ -96,6 +106,20 @@
   height: 100%;
   object-fit: contain;
   display: block;
+}
+
+.panel.compact .logo:not(.fallback) {
+  width: 32px;
+  height: 32px;
+}
+
+.logo.fallback {
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
 }
     .head h2 { margin: 0; flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
     .close { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: #444746; font-size: 20px; line-height: 1; }
@@ -381,6 +405,8 @@
       width: `${width}px`,
       maxHeight: `${height}px`
     });
+    // Short panes get a smaller logo so the sticky header leaves room for the content.
+    panel.classList.toggle("compact", height < 300);
   }
 
   // restoreFocus: false when the user dismissed by clicking elsewhere, so focus stays where they clicked.
@@ -449,18 +475,24 @@
     close.setAttribute("aria-label", "Close PhishGuard details");
     close.addEventListener("click", () => setExpanded(false));
     const logo = el("span", { className: "logo" });
-    const logoImg = el("img", {
-      src: chrome.runtime.getURL("prototype/PhishGuardLogo.png"),
-      alt: ""
-    });
+    // Falls back to the "P" mark when the image can't load (no extension context, or a reloaded
+    // extension invalidated it), so the panel always renders.
+    const fallback = () => { logo.replaceChildren(); logo.classList.add("fallback"); logo.textContent = "P"; };
+    const logoUrl = extensionUrl(LOGO_PATH);
+    if (logoUrl) {
+      const logoImg = el("img", { src: logoUrl, alt: "" });
 
-    logoImg.style.width = "70%";
-    logoImg.style.height = "70%";
-    logoImg.style.objectFit = "contain";
-    logoImg.style.maxWidth = "100%";
-    logoImg.style.maxHeight = "100%";
+      logoImg.style.width = "70%";
+      logoImg.style.height = "70%";
+      logoImg.style.objectFit = "contain";
+      logoImg.style.maxWidth = "100%";
+      logoImg.style.maxHeight = "100%";
+      logoImg.addEventListener("error", fallback, { once: true });
 
-    logo.appendChild(logoImg);
+      logo.appendChild(logoImg);
+    } else {
+      fallback();
+    }
     logo.setAttribute("aria-hidden", "true");
 
     return el("header", { className: "head" }, [

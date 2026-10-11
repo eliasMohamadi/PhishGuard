@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["prototype/PhishGuardLogo.png"],
+      "resources": ["assets/PhishGuardLogo.png"],
       "matches": ["https://mail.google.com/*"]
     }
   ]

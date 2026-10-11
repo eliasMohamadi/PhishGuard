@@ -4,9 +4,9 @@
 .env
 .env.*
 !.env.example
-server/ .env
 server/.env
 node_modules/
 
-# macOS metadata
+# OS metadata
 .DS_Store
+Thumbs.db

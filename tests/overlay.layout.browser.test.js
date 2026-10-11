@@ -198,3 +198,29 @@ test("Escape and the close button collapse the panel and return focus to the bad
   assert.ok((await measure()).panelOpen);
   assert.deepEqual(page.errors, []);
 });
+
+test("the packaged logo renders in the panel header, and a short pane shrinks it so the content still fits", { skip }, async () => {
+  // Stand in for the extension context: getURL resolves to the real asset in the repository.
+  const logoUrl = pathToFileURL(path.join(__dirname, "..", "assets", "PhishGuardLogo.png")).href;
+  const { identifier } = await page.send("Page.addScriptToEvaluateOnNewDocument",
+    { source: `window.chrome = { runtime: { getURL: path => path === "assets/PhishGuardLogo.png" ? ${JSON.stringify(logoUrl)} : "" } };` });
+  try {
+    const logo = () => page.evaluate(`(() => { const l = document.getElementById("phishguard-overlay-host").shadowRoot.querySelector(".logo"); const img = l.querySelector("img"); const r = l.getBoundingClientRect();
+      return { loaded: !!img && img.complete && img.naturalWidth > 0, fallback: l.classList.contains("fallback"), height: r.height }; })()`);
+    for (const [width, height] of [[1280, 800], [900, 420]]) {
+      await openFixture(width, height);
+      await openPanel();
+      await page.waitFor(`document.getElementById("phishguard-overlay-host").shadowRoot.querySelector(".logo img")?.complete`);
+      const l = await logo();
+      assert.ok(l.loaded && !l.fallback, `${width}x${height}: logo image didn't load`);
+      let m = await measure();
+      if (height < 500) assert.ok(l.height <= 32.5, `${width}x${height}: logo not shrunk on a short pane`);
+      await wheelUntilStable(...center(m.panel), () => page.evaluate(`document.getElementById("phishguard-overlay-host").shadowRoot.querySelector(".panel").scrollTop`));
+      m = await measure();
+      assert.ok(m.action.top >= m.head.bottom - 1 && m.action.bottom <= m.panel.bottom + 1, `${width}x${height}: recommended action not fully visible`);
+    }
+    assert.deepEqual(page.errors, []);
+  } finally {
+    await page.send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+  }
+});

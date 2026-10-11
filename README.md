@@ -258,11 +258,11 @@ node --test "tests/*.test.js"
 cd server && npm test
 ```
 
-- **Browser tests:** `tests/overlay.browser.test.js` drives `tests/browser/overlay-test.html` in headless Chrome. It is skipped if Chrome isn't found; set `CHROME_PATH` to point at a Chrome or Chromium binary.
+- **Browser tests:** `tests/overlay.browser.test.js` drives `tests/browser/overlay-test.html` in headless Chrome. `tests/overlay.layout.browser.test.js` uses real mouse, wheel and keyboard input on a Gmail-like layout (`tests/browser/gmail-layout.html`) to check badge and panel placement, scrolling, dismissal and the logo. Both are skipped if Chrome isn't found; set `CHROME_PATH` to point at a Chrome or Chromium binary.
 - **Glob syntax:** keep the quotes around `"tests/*.test.js"`. Passing a bare directory (`node --test tests/`) doesn't work on recent Node versions.
 - **No live calls:** the backend tests use a stubbed Gemini client and make no network calls.
 
-Last run on Windows 11 with Node 24 and Chrome installed: extension tests **88/88 passed**, backend tests **29/29 passed**.
+Last run on Windows 11 with Node 24 and Chrome installed: extension tests **96/96 passed**, backend tests **29/29 passed**.
 
 These tests check behavior: scoring rules, policy, payload sanitization, error handling, and overlay rendering. They do not measure real-world detection accuracy.
 
@@ -278,6 +278,7 @@ PhishGuard/
 ├── overlay.js           # Badge and details panel (shadow DOM)
 ├── background.js        # Service worker: the only path to the backend
 ├── popup.html / popup.css / popup.js   # Manual scan and AI opt-in
+├── assets/PhishGuardLogo.png           # Logo used by the popup and overlay
 ├── server/
 │   ├── index.js         # Express app: POST /analyze → Gemini
 │   ├── index.test.js
@@ -288,9 +289,10 @@ PhishGuard/
 │   ├── analysis.test.js
 │   ├── background.test.js
 │   ├── overlay.browser.test.js
-│   └── browser/overlay-test.html
+│   ├── overlay.layout.browser.test.js
+│   └── browser/         # Test pages and a minimal DevTools-protocol driver
 ├── website/             # Static landing page (see website/README.md)
-└── prototype/overlay-preview.html
+└── prototype/           # Design previews (overlay mockup, alternate logo)
 ```
 
 ## Deployment
