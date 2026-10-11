@@ -1,5 +1,12 @@
 .idea/
 .mcp.json
+#keep API secrets out of Github
 .env
 .env.*
 !.env.example
+server/ .env
+server/.env
+node_modules/
+
+# macOS metadata
+.DS_Store

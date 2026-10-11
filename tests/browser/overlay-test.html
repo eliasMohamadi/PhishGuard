@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Overlay tests</title>
+  <!-- Loaded by tests/overlay.browser.test.js in headless Chrome. Results are written to
+       <body data-results>. Uses synthetic data only; no network. -->
+</head>
+<body>
+  <div role="main" style="position:absolute;inset:0;overflow:auto">
+    <div class="ha"><h2 class="hP">Synthetic subject</h2></div>
+    <div class="a3s aiL" id="msg">Synthetic body</div>
+  </div>
+  <script>
+    // Count the overlay's document-level pointerdown listeners, to catch duplicates.
+    window.pointerListeners = 0;
+    const add = document.addEventListener.bind(document);
+    const remove = document.removeEventListener.bind(document);
+    document.addEventListener = (type, ...rest) => { if (type === "pointerdown") pointerListeners++; return add(type, ...rest); };
+    document.removeEventListener = (type, ...rest) => { if (type === "pointerdown") pointerListeners--; return remove(type, ...rest); };
+  </script>
+  <script src="../../overlay.js"></script>
+  <script>
+    const results = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const anchor = document.getElementById("msg");
+    const shadow = () => document.getElementById("phishguard-overlay-host")?.shadowRoot;
+    const badgeText = () => shadow()?.querySelector(".badge")?.textContent || "";
+    const footerText = () => shadow()?.querySelector(".foot")?.textContent || "";
+    const result = (score, ai) => ({ score, verdict: "", reasons: ["Synthetic reason"], ai });
+    async function check(name, fn) {
+      try { await fn(); results.push({ name, ok: true }); }
+      catch (e) { results.push({ name, ok: false, error: String(e.message || e) }); }
+      PhishGuardOverlay.clear();
+    }
+    const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
+
+    (async () => {
+      await check("a slow result for an earlier email never appears on the next one", async () => {
+        PhishGuardOverlay.track("A", anchor, () => sleep(300).then(() => result(95)));
+        PhishGuardOverlay.track("B", anchor, () => sleep(50).then(() => result(10)));
+        await sleep(600);
+        expect(/Low risk 10%/.test(badgeText()), `badge: ${badgeText()}`);
+        expect(!/95/.test(badgeText()), "stale score shown");
+      });
+
+      await check("clearing while analysis is pending leaves nothing behind", async () => {
+        PhishGuardOverlay.track("C", anchor, () => sleep(100).then(() => result(80)));
+        PhishGuardOverlay.clear();
+        await sleep(300);
+        expect(!document.getElementById("phishguard-overlay-host"), "overlay re-appeared");
+      });
+
+      await check("the same key does not re-run the analysis", async () => {
+        let runs = 0;
+        const analyze = () => { runs++; return result(40); };
+        PhishGuardOverlay.track("D", anchor, analyze);
+        PhishGuardOverlay.track("D", anchor, analyze);
+        await sleep(50);
+        PhishGuardOverlay.track("D", anchor, analyze);
+        expect(runs === 1, `runs: ${runs}`);
+      });
+
+      await check("a stalled analysis ends in the error state after the guard", async () => {
+        PhishGuardOverlay.track("E", anchor, () => new Promise(() => {}), { aiEnabled: true });
+        await sleep(100);
+        expect(/AI review/.test(badgeText()), `loading badge: ${badgeText()}`);
+        await sleep(12500);
+        expect(/analysis unavailable/.test(badgeText()), `badge: ${badgeText()}`);
+      });
+
+      const footerFor = async (key, ai) => {
+        PhishGuardOverlay.track(key, anchor, () => result(40, ai));
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        return footerText();
+      };
+      await check("footer: AI off", async () => {
+        const t = await footerFor("F1", { status: "skipped", reason: "disabled" });
+        expect(/AI review is off/.test(t) && !/Checked with rules, inbox context and AI/.test(t), t);
+      });
+      await check("footer: AI not needed", async () => {
+        const t = await footerFor("F2", { status: "skipped", reason: "policy" });
+        expect(/wasn't needed/.test(t), t);
+      });
+      await check("footer: AI failed", async () => {
+        const t = await footerFor("F3", { status: "error", reason: "timeout" });
+        expect(/AI review was unavailable/.test(t), t);
+      });
+      await check("footer: AI reviewed", async () => {
+        const t = await footerFor("F4", { status: "ok", reason: null });
+        expect(/AI review \(Gemini/.test(t), t);
+      });
+      await check("footer: no ai field claims nothing", async () => {
+        const t = await footerFor("F5", undefined);
+        expect(/AI review is off/.test(t), t);
+      });
+      await check("footer: a forged ai status is not trusted", async () => {
+        const t = await footerFor("F6", { status: "reviewed-by-ai" });
+        expect(!/Gemini/.test(t), t);
+      });
+
+      // --- Click outside to dismiss ---
+      const press = target => {
+        const event = new PointerEvent("pointerdown", { bubbles: true, composed: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event;
+      };
+      const isOpen = () => shadow()?.querySelector(".badge")?.getAttribute("aria-expanded") === "true"
+        && !shadow().querySelector(".panel").hidden;
+      const openPanel = async key => {
+        PhishGuardOverlay.track(key, anchor, () => result(40));
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        expect(isOpen(), "panel did not open");
+      };
+
+      await check("a press outside the overlay collapses the panel without blocking Gmail", async () => {
+        await openPanel("O1");
+        let gmailSaw = 0;
+        const gmailHandler = () => gmailSaw++;
+        anchor.addEventListener("pointerdown", gmailHandler);
+        document.body.addEventListener("pointerdown", gmailHandler);
+        const event = press(anchor);
+        anchor.removeEventListener("pointerdown", gmailHandler);
+        document.body.removeEventListener("pointerdown", gmailHandler);
+        expect(!isOpen(), "panel still open");
+        expect(shadow().querySelector(".badge"), "badge removed; should collapse, not remove");
+        expect(!event.defaultPrevented, "outside press was cancelled");
+        expect(gmailSaw === 2, `Gmail handlers ran ${gmailSaw} times, expected 2`);
+      });
+
+      await check("an outside press doesn't move focus to the badge", async () => {
+        await openPanel("O2");
+        press(document.querySelector("h2.hP"));
+        expect(shadow().activeElement !== shadow().querySelector(".badge"), "focus moved to the badge");
+      });
+
+      await check("presses inside the panel keep it open", async () => {
+        await openPanel("I1");
+        for (const selector of [".panel", ".head", "#pg-title", ".body", ".score", ".meter", ".group li", ".action", ".foot"]) {
+          const target = shadow().querySelector(selector);
+          expect(target, `missing ${selector}`);
+          press(target);
+          expect(isOpen(), `closed after pressing ${selector}`);
+        }
+      });
+
+      await check("the close button and Escape still collapse the panel", async () => {
+        await openPanel("I2");
+        shadow().querySelector(".close").click();
+        expect(!isOpen(), "close button didn't collapse");
+        shadow().querySelector(".badge").click();
+        shadow().querySelector(".panel").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        expect(!isOpen(), "Escape didn't collapse");
+      });
+
+      await check("an outside press while collapsed changes nothing", async () => {
+        PhishGuardOverlay.track("C1", anchor, () => result(40));
+        await sleep(50);
+        press(anchor);
+        expect(!isOpen() && /Caution 40%/.test(badgeText()), `badge: ${badgeText()}`);
+      });
+
+      await check("dismissal keeps working after reopening and across emails, with one listener", async () => {
+        await openPanel("R1");
+        for (let i = 0; i < 3; i++) {
+          press(anchor);
+          expect(!isOpen(), `round ${i}: not dismissed`);
+          shadow().querySelector(".badge").click();
+          expect(isOpen(), `round ${i}: didn't reopen`);
+        }
+        expect(pointerListeners === 1, `listeners while mounted: ${pointerListeners}`);
+        PhishGuardOverlay.track("R2", anchor, () => result(70)); // switch email
+        await sleep(50);
+        shadow().querySelector(".badge").click();
+        press(anchor);
+        expect(!isOpen(), "not dismissed after switching email");
+        expect(pointerListeners === 1, `listeners after switching: ${pointerListeners}`);
+        PhishGuardOverlay.clear();
+        expect(pointerListeners === 0, `listeners after clear: ${pointerListeners}`);
+        await openPanel("R3"); // remount
+        expect(pointerListeners === 1, `listeners after remount: ${pointerListeners}`);
+        press(anchor);
+        expect(!isOpen(), "not dismissed after remount");
+      });
+
+      document.body.dataset.results = JSON.stringify(results);
+    })();
+  </script>
+</body>
+</html>

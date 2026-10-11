@@ -46,17 +46,69 @@ analyzeBtn.addEventListener("click", async () => {
       response = await requestEmail(tab.id);
     } catch (_) {
       // Tabs opened before the extension was installed or reloaded have no content script yet.
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["detector.js", "context.js", "analysis.js", "overlay.js", "content.js"] });
       response = await requestEmail(tab.id);
     }
 
     if (!response?.ok) throw new Error(response?.error || "Could not read the open email.");
-    const result = PhishGuardDetector.analyzeEmail(response.email);
+    const email = response.email;
+    const result = PhishGuardContext.applyContext(
+      PhishGuardDetector.analyzeEmail(email),
+      PhishGuardContext.analyzeContext(email, email.recentEmails)
+    );
     renderResult(result);
-    statusEl.textContent = "Scanned locally. Email content was not sent to an AI service.";
+    statusEl.textContent = "Scanned locally. This scan did not send email content to an AI service.";
   } catch (error) {
     statusEl.textContent = error.message || "Could not analyze this email.";
   } finally {
     analyzeBtn.disabled = false;
+  }
+});
+
+// --- AI review opt-in (off by default). Must match background.js. ---
+const AI_SETTING = "aiReviewEnabled";
+const AI_ORIGIN = "http://127.0.0.1:3000/*";
+const aiToggle = document.getElementById("aiToggle");
+const aiStateEl = document.getElementById("aiState");
+const aiStatusEl = document.getElementById("aiStatus");
+
+function showAiState(enabled, message = "") {
+  aiToggle.checked = enabled;
+  aiStateEl.textContent = enabled ? "On" : "Off";
+  aiStatusEl.textContent = message;
+}
+
+chrome.storage.local.get(AI_SETTING)
+  .then(values => showAiState(values[AI_SETTING] === true))
+  .catch(() => showAiState(false));
+
+aiToggle.addEventListener("change", async () => {
+  aiToggle.disabled = true;
+  try {
+    if (aiToggle.checked) {
+      // Asked only from this click; without the permission AI stays off.
+      let granted = false;
+      try {
+        granted = await chrome.permissions.request({ origins: [AI_ORIGIN] });
+      } catch (_) { /* treated as denied */ }
+      if (!granted) {
+        await chrome.storage.local.set({ [AI_SETTING]: false });
+        showAiState(false, "Permission wasn't granted, so AI review stays off.");
+        return;
+      }
+      await chrome.storage.local.set({ [AI_SETTING]: true });
+      showAiState(true, "AI review is on for emails you open in Gmail. Start the PhishGuard server to use it.");
+    } else {
+      await chrome.storage.local.set({ [AI_SETTING]: false });
+      try {
+        await chrome.permissions.remove({ origins: [AI_ORIGIN] });
+      } catch (_) { /* the setting alone already stops requests */ }
+      showAiState(false, "AI review is off. Nothing more is sent.");
+    }
+  } catch (_) {
+    await chrome.storage.local.set({ [AI_SETTING]: false }).catch(() => {});
+    showAiState(false, "Couldn't change the setting, so AI review is off.");
+  } finally {
+    aiToggle.disabled = false;
   }
 });

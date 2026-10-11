@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhishGuard Overlay Preview</title>
+  <!-- Synthetic Gmail-like page for previewing the overlay without Gmail. Open this file directly
+       in Chrome. It runs the real detector.js, context.js, overlay.js and content.js; no network calls. -->
+  <style>
+    body { margin: 0; font: 14px/1.5 Roboto, system-ui, sans-serif; background: #f6f8fc; color: #1f1f1f; }
+    .top { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 16px; flex-wrap: wrap; }
+    .top strong { margin-right: 12px; }
+    .top button { padding: 6px 12px; border-radius: 16px; border: 1px solid #c4c7c5; background: #fff; cursor: pointer; }
+    .layout { display: flex; height: calc(100vh - 64px); }
+    nav { width: 220px; flex: none; }
+    [role="main"] { flex: 1; margin: 0 16px 16px 0; background: #fff; border-radius: 16px; overflow: auto; }
+    .toolbar { height: 48px; border-bottom: 1px solid #eee; }
+    .ha { display: flex; align-items: center; gap: 4px; margin: 20px 24px 12px 72px; }
+    h2.hP { flex: 1; font-size: 22px; font-weight: 400; margin: 0; }
+    .ctl { width: 32px; height: 32px; display: grid; place-items: center; color: #444746; border-radius: 50%; }
+    .adn { padding: 0 24px 0 72px; }
+    .gD { font-weight: 600; }
+    .a3s { padding: 16px 0 400px; max-width: 720px; }
+    .inbox { display: none; }
+    @media (max-width: 700px) { nav { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <strong>Overlay preview</strong>
+    <button data-email="high">High-risk email</button>
+    <button data-email="medium">Medium email</button>
+    <button data-email="low">Normal email</button>
+    <button id="closeEmail">Close email</button>
+    <button id="slow">Slow analysis (3s)</button>
+    <button id="fail">Failed analysis</button>
+  </div>
+  <div class="layout">
+    <nav></nav>
+    <div role="main" id="main"><p style="padding:24px">Pick a synthetic email above.</p></div>
+  </div>
+  <!-- Hidden inbox rows, as Gmail keeps them in the DOM, for context.js -->
+  <table class="inbox"><tbody>
+    <tr class="zA"><td class="yW"><span email="news@shop.example">Shop</span></td><td class="bog">Weekly deals</td><td class="y2">Save on...</td></tr>
+    <tr class="zA"><td class="yW"><span email="alex@colleague.example">Alex</span></td><td class="bog">Team lunch</td><td class="y2">Friday?</td></tr>
+  </tbody></table>
+
+  <script>
+    window.chrome = { runtime: { onMessage: { addListener() {} } } }; // content.js expects this
+    const EMAILS = {
+      high: { id: "m-high", sender: "alerts@usps-redeliver.top", name: "USPS Delivery",
+        subject: "USPS: Delivery failed — action required",
+        body: 'Your package could not be delivered. Pay a small fee within 24 hours or it will be returned. <a href="http://usps-redeliver.top/pay?id=1">Confirm your card details</a>.' },
+      medium: { id: "m-med", sender: "billing@acct-notice.example", name: "Billing Team",
+        subject: "Invoice overdue",
+        body: 'Your invoice is past due. Please review the payment details at <a href="https://acct-notice.example/invoice">our portal</a> today.' },
+      low: { id: "m-low", sender: "alex@colleague.example", name: "Alex",
+        subject: "Team lunch",
+        body: "Hi! Are we still on for lunch on Friday at noon? Let me know." }
+    };
+    const main = document.getElementById("main");
+    function openEmail(kind) {
+      const e = EMAILS[kind];
+      // Subject row mimics Gmail's: subject on the left, print / new-window controls on the right.
+      main.innerHTML = `<div class="toolbar"></div><div class="ha"><h2 class="hP"></h2>
+        <span class="ctl" role="button" aria-label="Print all">&#9113;</span>
+        <span class="ctl" role="button" aria-label="In new window">&#8599;</span></div>
+        <div class="adn" data-message-id="${e.id}"><span class="gD"></span>
+        <div class="a3s aiL">${e.body}</div></div>`;
+      main.querySelector("h2").textContent = e.subject;
+      const s = main.querySelector(".gD");
+      s.setAttribute("email", e.sender); s.setAttribute("name", e.name); s.textContent = `${e.name} <${e.sender}>`;
+    }
+    document.querySelectorAll("[data-email]").forEach(b => b.onclick = () => openEmail(b.dataset.email));
+    document.getElementById("closeEmail").onclick = () => { main.innerHTML = '<p style="padding:24px">Inbox</p>'; };
+    // These two bypass content.js to drive the overlay's loading and error states directly.
+    document.getElementById("slow").onclick = () => {
+      openEmail("medium");
+      setTimeout(() => PhishGuardOverlay.track("slow-" + Date.now(), main.querySelector(".a3s"),
+        () => new Promise(r => setTimeout(() => r(PhishGuardDetector.analyzeEmail({
+          subject: EMAILS.medium.subject, sender: EMAILS.medium.sender, body: EMAILS.medium.body })), 3000))), 300);
+    };
+    document.getElementById("fail").onclick = () => {
+      openEmail("low");
+      setTimeout(() => PhishGuardOverlay.track("fail-" + Date.now(), main.querySelector(".a3s"),
+        () => Promise.reject(new Error("synthetic failure"))), 300);
+    };
+    // Deep links for screenshots: #high, #medium, #low, optionally +open (e.g. #high+open).
+    const [kind, open] = location.hash.slice(1).split("+");
+    if (kind === "fail" || kind === "slow") document.getElementById(kind).click();
+    if (kind === "fail" && open) setTimeout(() => document.getElementById("phishguard-overlay-host")
+      ?.shadowRoot.querySelector(".badge").click(), 800);
+    if (EMAILS[kind]) {
+      setTimeout(() => openEmail(kind));
+      if (open) setTimeout(() => document.getElementById("phishguard-overlay-host")
+        ?.shadowRoot.querySelector(".badge").click(), 800);
+    }
+  </script>
+  <script src="../detector.js"></script>
+  <script src="../context.js"></script>
+  <script src="../analysis.js"></script>
+  <script src="../overlay.js"></script>
+  <script src="../content.js"></script>
+</body>
+</html>

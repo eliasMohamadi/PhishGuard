@@ -1,0 +1,19 @@
+{
+  "name": "phishguard-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PhishGuard analysis backend (Step 1: placeholder skeleton, no real AI calls).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@google/genai": "^2.28.0",
+    "dotenv": "^18.0.7",
+    "express": "^5.1.0"
+  }
+}

@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhishGuard – Phishing warnings inside Gmail</title>
+  <meta name="description" content="PhishGuard is a Chrome extension that flags suspicious Gmail messages with an explained risk score, using local detection rules, inbox context and optional Gemini AI review.">
+  <meta name="theme-color" content="#060912">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <!-- Social sharing. When the site is deployed, make og:image an absolute URL and add og:url. -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="PhishGuard – Your inbox. Your defense.">
+  <meta property="og:description" content="Explained phishing risk scores inside Gmail, from local detection rules, inbox context and optional Gemini AI review.">
+  <meta property="og:image" content="assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PhishGuard – Your inbox. Your defense.">
+  <meta name="twitter:description" content="Explained phishing risk scores inside Gmail.">
+  <meta name="twitter:image" content="assets/og-image.png">
+
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <!-- Icon sprite (Lucide-style line icons, inline so the page has no external requests). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+  </svg>
+
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" id="top">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="PhishGuard home">
+        <svg class="brand-icon" aria-hidden="true"><use href="#i-shield"/></svg>
+        <span>PhishGuard</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu">
+        <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
+      </button>
+      <nav class="nav-menu" id="nav-menu" aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="#how">How It Works</a>
+        <a href="#security">Security</a>
+        <a href="#faq">FAQ</a>
+        <a class="btn btn-primary btn-sm" href="#get" data-install>Get PhishGuard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span> Chrome extension for Gmail</p>
+          <h1>Your inbox.<br><span class="accent">Your defense.</span></h1>
+          <p class="lede">Spot suspicious emails before they trick you. PhishGuard analyzes phishing signals, suspicious links, sender identity, and inbox context to help you make safer decisions in Gmail.</p>
+          <div class="hero-ctas">
+            <a class="btn btn-primary" href="#get" data-install>Get PhishGuard <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+            <a class="btn btn-ghost" href="#how">See How It Works</a>
+          </div>
+          <ul class="hero-points">
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Works locally by default</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> AI review only if you turn it on</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Every score comes with reasons</li>
+          </ul>
+        </div>
+
+        <!-- Static product mockup: illustrative only, fictional sender. -->
+        <figure class="mock" aria-labelledby="mock-caption">
+          <div class="mock-window" role="img" aria-label="Illustration: a Gmail-style inbox showing a phishing email from a fictional bank. PhishGuard shows a red High risk 92% badge and a panel listing the warning signs and a recommended action.">
+            <div class="mock-chrome" aria-hidden="true">
+              <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+              <span class="url"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>mail.google.com</span>
+            </div>
+            <div class="gm" aria-hidden="true">
+              <aside class="gm-side">
+                <span class="gm-compose">Compose</span>
+                <span class="gm-nav on">Inbox <b>4</b></span>
+                <span class="gm-nav">Starred</span>
+                <span class="gm-nav">Sent</span>
+                <span class="gm-nav">Drafts</span>
+              </aside>
+              <div class="gm-main">
+                <div class="gm-toolbar"><i></i><i></i><i></i><i></i></div>
+                <div class="gm-subject">
+                  <h3>Urgent: unusual sign-in detected on your account</h3>
+                  <span class="pg-badge">
+                    <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> High risk · 92%
+                  </span>
+                </div>
+                <div class="gm-from">
+                  <span class="avatar">N</span>
+                  <div>
+                    <strong>Northwind Bank Security</strong>
+                    <span>&lt;alerts@northwind-bank-verify.top&gt;</span>
+                    <small>to me</small>
+                  </div>
+                  <time>9:41 AM</time>
+                </div>
+                <div class="gm-body">
+                  <p>Dear customer,</p>
+                  <p>We detected an unusual sign-in attempt. Your account will be suspended within 24 hours unless you confirm your password and card details.</p>
+                  <span class="gm-btn">Verify your account</span>
+                  <p class="gm-link">northwind-bank-verify.top/secure-login</p>
+                </div>
+
+                <div class="pg-panel">
+                  <div class="pg-head">
+                    <span class="pg-logo">P</span>
+                    <span>PhishGuard security check</span>
+                    <svg class="icon pg-close" aria-hidden="true"><use href="#i-x"/></svg>
+                  </div>
+                  <div class="pg-body">
+                    <p class="pg-label">Overall risk</p>
+                    <div class="pg-score">
+                      <span class="pg-num">92<small>%</small></span>
+                      <div>
+                        <span class="pg-pill"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> High risk</span>
+                        <strong>Strong warning signs of phishing</strong>
+                      </div>
+                    </div>
+                    <div class="pg-meter"><span></span></div>
+                    <p class="pg-label">Detected signals</p>
+                    <ul class="pg-signals">
+                      <li><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>Link goes to a lookalike domain, not the bank's own site.</li>
+                      <li><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>Claims to be Northwind Bank but was sent from an unrelated domain.</li>
+                      <li><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>Threatens suspension within 24 hours.</li>
+                      <li><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Asks you to confirm your password and card details.</li>
+                    </ul>
+                    <div class="pg-action">
+                      <strong>Don't click links, open attachments or reply.</strong>
+                      Contact the bank through its official website or a phone number you already trust.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption id="mock-caption">Illustrative example with a fictional sender. Not a live inbox.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Value proposition -->
+    <section class="values" aria-label="Why PhishGuard">
+      <div class="wrap values-grid">
+        <article class="value reveal">
+          <svg class="icon-lg" aria-hidden="true"><use href="#i-inbox"/></svg>
+          <h2>Context-aware detection</h2>
+          <p>Warning signs are weighed together with what your inbox shows, such as whether you've heard from this sender before.</p>
+        </article>
+        <article class="value reveal">
+          <svg class="icon-lg" aria-hidden="true"><use href="#i-eye"/></svg>
+          <h2>Explainable warnings</h2>
+          <p>Every score comes with the specific signals behind it and a practical next step, not just a red light.</p>
+        </article>
+        <article class="value reveal">
+          <svg class="icon-lg" aria-hidden="true"><use href="#i-sparkles"/></svg>
+          <h2>Optional AI analysis</h2>
+          <p>Turn on Gemini review for a second opinion on emails the local checks find uncertain. It's off until you enable it.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Features</p>
+          <h2 id="features-title">Built to explain, not just to alarm</h2>
+          <p>PhishGuard runs inside Gmail and shows its reasoning, so you can decide with the evidence in front of you.</p>
+        </div>
+        <div class="features">
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+            <h3>Phishing signal detection</h3>
+            <p>Flags urgent or threatening language, requests for passwords, payment or verification codes, link shorteners, punycode, raw IP addresses, brand-lookalike domains, and links that don't match the sender.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg></span>
+            <h3>Inbox context</h3>
+            <p>Compares the open email with the recent messages listed in your Gmail inbox: a brand claimed from the wrong domain, a sender you've never heard from, or a delivery or invoice with no matching order.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg></span>
+            <h3>Explainable risk scores</h3>
+            <p>A compact badge on the email expands into a 0–100 score, a plain-language verdict, the signals grouped by category, and a recommended action.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg></span>
+            <h3>Optional AI review</h3>
+            <p>When you opt in, emails with an uncertain local score get a Gemini review through a PhishGuard server you run. Clear-cut cases are decided locally.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span>
+            <h3>Privacy-conscious design</h3>
+            <p>The Gemini API key stays on the server, never in the extension. Email content is only sent for AI review after you turn it on, and your other inbox emails are never sent.</p>
+          </article>
+          <article class="feature reveal">
+            <span class="feature-icon"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
+            <h3>Graceful fallback</h3>
+            <p>If AI review is off, not needed, times out or fails, you still get the full local result, and the panel says which one happened.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section section-alt" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">How it works</p>
+          <h2 id="how-title">Three steps, inside the inbox you already use</h2>
+        </div>
+        <ol class="steps">
+          <li class="step reveal">
+            <span class="step-num">1</span>
+            <h3>Open an email in Gmail</h3>
+            <p>PhishGuard checks the open message automatically with its local rules and your inbox context. A small badge appears next to the subject.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">2</span>
+            <h3>Review the score and signals</h3>
+            <p>Select the badge to see the risk score, the verdict and each warning sign it found, grouped so you can scan them quickly.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">3</span>
+            <h3>Decide: trust, verify or avoid</h3>
+            <p>Follow the recommended action. When in doubt, contact the sender through a channel you already trust, not the links in the email.</p>
+          </li>
+        </ol>
+        <aside class="ai-note reveal" aria-label="About optional AI review">
+          <svg class="icon-lg" aria-hidden="true"><use href="#i-sparkles"/></svg>
+          <div>
+            <h3>Where AI fits in</h3>
+            <p>AI review is off by default. If you turn it on, PhishGuard asks Gemini only when the local score falls in the uncertain middle range (20–59). Low-risk and high-risk emails are decided locally, and nothing is sent while the setting is off.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Security & privacy -->
+    <section class="section" id="security" aria-labelledby="security-title">
+      <div class="wrap security-grid">
+        <div class="section-head left reveal">
+          <p class="kicker">Security &amp; privacy</p>
+          <h2 id="security-title">Clear about what stays and what's sent</h2>
+          <p>Here's exactly how PhishGuard handles your email, based on how the extension is built today.</p>
+        </div>
+        <div class="security-list">
+          <article class="sec-item reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg>
+            <div>
+              <h3>Local by default</h3>
+              <p>Rules and inbox-context checks run in your browser. With AI review off, no email content leaves your device.</p>
+            </div>
+          </article>
+          <article class="sec-item reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-server"/></svg>
+            <div>
+              <h3>AI review is opt-in</h3>
+              <p>When enabled and needed, the email's subject, sender, body (up to 12,000 characters), up to 50 links, and PhishGuard's short findings go to your PhishGuard server, which forwards them to Google Gemini. Your other inbox emails are never sent.</p>
+            </div>
+          </article>
+          <article class="sec-item reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-key"/></svg>
+            <div>
+              <h3>The API key stays on the server</h3>
+              <p>The Gemini key lives in the server's configuration. The extension never sees it and only talks to the local server you run.</p>
+            </div>
+          </article>
+          <article class="sec-item reveal">
+            <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+            <div>
+              <h3>Estimates, not guarantees</h3>
+              <p>A score is a heuristic estimate. A low score doesn't prove an email is safe, and a high one doesn't prove it's malicious. Always verify unexpected requests independently.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Get PhishGuard -->
+    <section class="section section-alt" id="get" aria-labelledby="get-title">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Get PhishGuard</p>
+          <h2 id="get-title">Install PhishGuard</h2>
+        </div>
+        <div class="install">
+          <article class="install-card reveal" data-store-card>
+            <div class="install-top">
+              <h3>Chrome Web Store</h3>
+              <span class="tag" data-store-status>Coming soon</span>
+            </div>
+            <p data-store-text>PhishGuard isn't published on the Chrome Web Store yet. One-click install will be available here once it is.</p>
+            <a class="btn btn-primary" href="#get" data-store-link hidden>Add to Chrome <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+          </article>
+          <article class="install-card reveal">
+            <div class="install-top">
+              <h3>Developer preview</h3>
+              <span class="tag tag-accent">Available now</span>
+            </div>
+            <p>Load the extension from its source code in Chrome's developer mode:</p>
+            <ol class="install-steps">
+              <li>Download or clone the source code from GitHub.</li>
+              <li>Open <code>chrome://extensions</code> and turn on <strong>Developer mode</strong>.</li>
+              <li>Select <strong>Load unpacked</strong> and choose the project folder (the one with <code>manifest.json</code>).</li>
+              <li>Open or refresh Gmail and open an email.</li>
+            </ol>
+            <p class="small">Optional AI review also needs the PhishGuard server running on your computer with your own Gemini API key; see the README.</p>
+            <a class="btn btn-ghost" data-github href="https://github.com/eliasMohamadi/PhishGuard" target="_blank" rel="noopener">View source on GitHub <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap faq-wrap">
+        <div class="section-head reveal">
+          <p class="kicker">FAQ</p>
+          <h2 id="faq-title">Questions, answered plainly</h2>
+        </div>
+        <div class="faq">
+          <details class="reveal">
+            <summary>What is PhishGuard?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>A Chrome extension that checks the email you open in Gmail for common phishing signs and shows a risk score with the reasons behind it. It combines local detection rules, context from your inbox and, if you choose, an AI review by Google Gemini.</p>
+          </details>
+          <details class="reveal">
+            <summary>Does it work with Gmail?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>Yes. It currently works in Gmail on the web (mail.google.com) in Chrome. Other email providers and the Gmail mobile apps aren't supported.</p>
+          </details>
+          <details class="reveal">
+            <summary>Does it use AI on every email?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>No. AI review is off by default. If you turn it on, PhishGuard only asks Gemini about emails whose local score is uncertain (20–59). Emails the local checks score as clearly low or clearly high risk aren't sent.</p>
+          </details>
+          <details class="reveal">
+            <summary>What email data is shared when AI analysis is enabled?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>For an email that needs AI review: its subject, sender, body (up to 12,000 characters), up to 50 links, and PhishGuard's own short findings about it. These go to the PhishGuard server running on your computer, which forwards them to Google Gemini under Google's API terms. Your other inbox emails are never sent. Turning AI review off stops further requests.</p>
+          </details>
+          <details class="reveal">
+            <summary>Can it guarantee that an email is safe?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>No. PhishGuard gives an estimate based on the signals it can see. It can miss phishing emails and can flag legitimate ones. Treat its score as one input, and verify unexpected requests for money, passwords or personal details through a channel you already trust.</p>
+          </details>
+          <details class="reveal">
+            <summary>How do I install it?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+            <p>PhishGuard isn't on the Chrome Web Store yet. For now you can load it as a developer preview: get the source from GitHub, open <code>chrome://extensions</code>, turn on Developer mode, and choose Load unpacked. See <a href="#get">Install PhishGuard</a> for the steps.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="cta">
+      <div class="wrap cta-inner reveal">
+        <svg class="cta-icon" aria-hidden="true"><use href="#i-shield"/></svg>
+        <h2>Read the warning signs before you click.</h2>
+        <p>PhishGuard puts an explained risk score next to every email you open in Gmail.</p>
+        <div class="hero-ctas center">
+          <a class="btn btn-primary" href="#get" data-install>Get PhishGuard <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          <a class="btn btn-ghost" href="#security">How we handle your email</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <a class="brand" href="#top">
+          <svg class="brand-icon" aria-hidden="true"><use href="#i-shield"/></svg>
+          <span>PhishGuard</span>
+        </a>
+        <p>Explained phishing warnings inside Gmail. A heuristic aid, not a guarantee.</p>
+      </div>
+      <nav class="footer-links" aria-label="Footer">
+        <a href="#features">Features</a>
+        <a href="#security">Security</a>
+        <a href="#faq">FAQ</a>
+        <a data-github href="https://github.com/eliasMohamadi/PhishGuard" target="_blank" rel="noopener">GitHub</a>
+        <a data-contact href="#" hidden>Contact</a>
+      </nav>
+    </div>
+    <div class="wrap footer-base">
+      <p>© <span data-year>2026</span> PhishGuard. Gmail and Chrome are trademarks of Google LLC. PhishGuard is not affiliated with Google.</p>
+    </div>
+  </footer>
+</body>
+</html>

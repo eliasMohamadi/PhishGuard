@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Overlay layout fixture</title>
+  <!-- Gmail-shaped layout for tests/overlay.layout.browser.test.js. Unlike overlay-test.html,
+       [role="main"] here is tall, non-scrolling content inside a separate scroll container under a
+       fixed header, which is the case where the overlay must clip itself to the visible pane.
+       Synthetic data only; no network. -->
+  <style>
+    body { margin: 0; font: 14px/1.5 Roboto, system-ui, sans-serif; }
+    #gmail-header { position: fixed; top: 0; left: 0; right: 0; height: 64px; background: #eaf1fb; z-index: 5; }
+    #scroller { position: absolute; top: 64px; left: 220px; right: 16px; bottom: 16px; overflow-y: auto; background: #fff; }
+    .toolbar { height: 48px; border-bottom: 1px solid #eee; }
+    .ha { display: flex; align-items: center; gap: 4px; margin: 20px 24px 12px 72px; }
+    h2.hP { flex: 1; margin: 0; font-size: 22px; font-weight: 400; }
+    .ctl { width: 32px; height: 32px; }
+    .adn { padding: 0 24px 0 72px; }
+    .a3s { max-width: 720px; padding: 16px 0; }
+    .a3s p { margin: 0 0 18px; }
+  </style>
+</head>
+<body>
+  <div id="gmail-header">Search mail</div>
+  <div id="scroller">
+    <div class="toolbar"></div>
+    <div role="main">
+      <div class="ha">
+        <h2 class="hP">Synthetic invoice reminder</h2>
+        <span class="ctl" role="button" aria-label="Print all"></span>
+        <span class="ctl" role="button" aria-label="In new window"></span>
+      </div>
+      <div class="adn" data-message-id="m1">
+        <span class="gD" email="billing@example.test">Billing</span>
+        <div class="a3s aiL" id="msg"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Long synthetic body so the reading pane scrolls.
+    const msg = document.getElementById("msg");
+    for (let i = 1; i <= 80; i++) {
+      const p = document.createElement("p");
+      p.textContent = `Synthetic paragraph ${i}. This text only exists to make the reading pane scroll.`;
+      msg.append(p);
+    }
+    // A long result: several categories and many signals, so the panel has to scroll.
+    window.longResult = () => ({
+      score: 78,
+      verdict: "High risk",
+      reasons: [
+        "Uses urgent language or threatens an account consequence.",
+        "Mentions passwords, financial details, verification codes, or sensitive information.",
+        "Contains 2 links; inspect destinations before clicking.",
+        "A link uses a URL shortener, punycode, a raw IP address, or a possible brand-lookalike domain.",
+        "Link domain differs from the sender's domain; this can be normal, but deserves a check.",
+        "Claims to be USPS but was sent from example.test.",
+        "This sender doesn't appear in your other recent emails.",
+        "Mentions an invoice or payment due, but no related recent email was found.",
+        "An unfamiliar sender asks you to send money, enter login or card details.",
+        "AI: Pressure to pay an unexpected invoice"
+      ],
+      context: { findings: [
+        { type: "sender", weight: 20, severity: "high", reason: "Claims to be USPS but was sent from example.test." },
+        { type: "sender", weight: 8, severity: "medium", reason: "This sender doesn't appear in your other recent emails." },
+        { type: "claim", weight: 12, severity: "medium", reason: "Mentions an invoice or payment due, but no related recent email was found." },
+        { type: "request", weight: 20, severity: "high", reason: "An unfamiliar sender asks you to send money, enter login or card details." }
+      ] },
+      ai: { status: "ok", reason: null }
+    });
+  </script>
+  <script src="../../overlay.js"></script>
+</body>
+</html>
