@@ -7,49 +7,49 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <main class="app">
-    <header class="header">
-      <div class="brand-mark">
-        <img src="assets/PhishGuardLogo.png" alt="">
-      </div>
-      <div>
-        <h1>PhishGuard</h1>
-        <p class="subtitle">Email threat check</p>
-      </div>
-    </header>
+<main class="app">
+  <header class="header">
+    <div class="brand-mark">
+      <img src="./PhishGuardLogo.png" alt="P">
+    </div>
+    <div>
+      <h1>PhishGuard</h1>
+      <p class="subtitle">Email threat check</p>
+    </div>
+  </header>
 
-    <section class="score-card" aria-live="polite">
-      <div class="score-ring" id="scoreRing">
-        <span id="score">--</span><small>/100</small>
-      </div>
-      <div class="score-copy">
-        <p class="eyebrow">PHISHING RISK</p>
-        <h2 id="verdict">Ready to scan</h2>
-        <p id="summary">Open an email in Gmail, then select Analyze.</p>
-      </div>
-    </section>
+  <section class="score-card" aria-live="polite">
+    <div class="score-ring" id="scoreRing">
+      <span id="score">--</span><small>/100</small>
+    </div>
+    <div class="score-copy">
+      <p class="eyebrow">PHISHING RISK</p>
+      <h2 id="verdict">Ready to scan</h2>
+      <p id="summary">Open an email in Gmail, then select Analyze.</p>
+    </div>
+  </section>
 
-    <button id="analyzeBtn" class="primary">Analyze open email</button>
-    <p id="status" class="status">Your email is analyzed locally by simple rules.</p>
+  <button id="analyzeBtn" class="primary">Analyze open email</button>
+  <p id="status" class="status">Your email is analyzed locally by simple rules.</p>
 
-    <section class="ai-optin" aria-labelledby="aiToggleLabel">
-      <label class="ai-toggle">
-        <input type="checkbox" id="aiToggle" aria-describedby="aiDisclosure">
-        <span id="aiToggleLabel">AI review in Gmail <em id="aiState">Off</em></span>
-      </label>
-      <p id="aiDisclosure" class="ai-note">When on, the open email's subject, sender, body and links, plus PhishGuard's short findings about it, are sent to your PhishGuard server on this computer (127.0.0.1:3000), which forwards them to Google Gemini. Your other inbox emails are never sent. When off, everything stays on this device.</p>
-      <p id="aiStatus" class="ai-note" aria-live="polite"></p>
-    </section>
+  <section class="ai-optin" aria-labelledby="aiToggleLabel">
+    <label class="ai-toggle">
+      <input type="checkbox" id="aiToggle" aria-describedby="aiDisclosure">
+      <span id="aiToggleLabel">AI review in Gmail <em id="aiState">Off</em></span>
+    </label>
+    <p id="aiDisclosure" class="ai-note">When on, the open email's subject, sender, body and links, plus PhishGuard's short findings about it, are sent to your PhishGuard server on this computer (127.0.0.1:3000), which forwards them to Google Gemini. Your other inbox emails are never sent. When off, everything stays on this device.</p>
+    <p id="aiStatus" class="ai-note" aria-live="polite"></p>
+  </section>
 
-    <section class="results">
-      <h3>Signals detected</h3>
-      <ul id="reasons"><li class="empty">No analysis yet.</li></ul>
-    </section>
+  <section class="results">
+    <h3>Signals detected</h3>
+    <ul id="reasons"><li class="empty">No analysis yet.</li></ul>
+  </section>
 
-    <footer>Heuristic estimate, not a guarantee. Verify sensitive requests through a trusted channel.</footer>
-  </main>
-  <script src="detector.js"></script>
-  <script src="context.js"></script>
-  <script src="popup.js"></script>
+  <footer>Heuristic estimate, not a guarantee. Verify sensitive requests through a trusted channel.</footer>
+</main>
+<script src="detector.js"></script>
+<script src="context.js"></script>
+<script src="popup.js"></script>
 </body>
 </html>

@@ -102,7 +102,7 @@ Solid arrows show the local path, which always runs. Dotted arrows show the opti
 
 | Component | Responsibility |
 |---|---|
-| `content.js` | Finds the open message in Gmail's DOM. It reads the subject, sender, body text and real link targets, unwrapping Google redirect links. It triggers the overlay and keeps the original score card as a fallback. |
+| `content.js` | Finds the open message in Gmail's DOM. It reads the subject, sender, body text and real link targets, unwrapping Google redirect links. It hands each open email to the overlay, which is the only in-page UI. |
 | `detector.js` | Rule scoring, the AI eligibility policy, score blending, and validation of AI responses. |
 | `context.js` | Reads recent inbox rows and runs the sender, claim and request checks. Runs only in the page. |
 | `analysis.js` | Wires the rules, context and optional AI together. It routes AI requests to the background worker through `chrome.runtime.sendMessage`. |

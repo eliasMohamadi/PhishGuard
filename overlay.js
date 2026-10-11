@@ -10,16 +10,6 @@
   const MEDIUM = 30;
   const CHART_MS = 800;
   const ANALYSIS_TIMEOUT_MS = 12000;
-  const LOGO_PATH = "assets/PhishGuardLogo.png"; // listed in manifest web_accessible_resources
-
-  // chrome-extension:// URL for a packaged file, or null outside an extension context.
-  function extensionUrl(path) {
-    try {
-      return root.chrome?.runtime?.getURL?.(path) || null;
-    } catch (_) {
-      return null;
-    }
-  }
   const AI_STATUSES = ["ok", "skipped", "error"];
 
   // Signal categories. "rules" are detector.js reasons; the rest are context.js finding types.
@@ -73,25 +63,14 @@
     .badge[aria-expanded="true"] { visibility: hidden; }
 
     .panel {
-      position: fixed; overflow-y: auto; overscroll-behavior: contain;
+      position: fixed; display: flex; flex-direction: column; overflow: hidden;
       background: #fff; border: 1px solid #dadce0; border-radius: 16px;
       box-shadow: 0 12px 32px rgba(60,64,67,.24), 0 2px 6px rgba(60,64,67,.12);
       transform-origin: top right; animation: open .2s cubic-bezier(.2,0,0,1);
     }
     .panel[hidden] { display: none; }
-.head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 12px 12px 20px;
-  border-bottom: 1px solid var(--line);
-}
-
-.logo {
+    .head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--line); }
+    .logo {
   width: 65px;
   height: 65px;
   border-radius: 6px;
@@ -107,28 +86,14 @@
   object-fit: contain;
   display: block;
 }
-
-.panel.compact .logo:not(.fallback) {
-  width: 32px;
-  height: 32px;
-}
-
-.logo.fallback {
-  width: 22px;
-  height: 22px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-  font-size: 12px;
-}
     .head h2 { margin: 0; flex: 1; font-size: 14px; font-weight: 500; color: var(--text); }
     .close { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: #444746; font-size: 20px; line-height: 1; }
     .close:hover { background: #f1f3f4; }
-    .body { padding: 4px 20px 20px; }
+    .body { padding: 4px 20px 20px; overflow: auto; flex: 1; }
     .foot { padding: 10px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
 
-    .body section { padding-top: 16px; }
-    .body section + section { margin-top: 16px; border-top: 1px solid var(--line); }
+    section { padding-top: 16px; }
+    section + section { margin-top: 16px; border-top: 1px solid var(--line); }
     h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 
     .overall { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -203,8 +168,8 @@
       reasons: result.reasons.filter(isText),
       findings: findings.filter(f => isText(f?.reason) && isText(f?.type) && Number.isFinite(f?.weight)),
       ai: AI_STATUSES.includes(result.ai?.status)
-        ? { status: result.ai.status, reason: isText(result.ai.reason) ? result.ai.reason : null }
-        : null
+          ? { status: result.ai.status, reason: isText(result.ai.reason) ? result.ai.reason : null }
+          : null
     };
   }
 
@@ -253,8 +218,8 @@
     }
     if (level === "medium") {
       return ["Verify before you act.", asksForMoney
-        ? "Confirm any request for money, payment changes or sign-in details by contacting the sender through a channel you already trust."
-        : "Check the sender's address and hover over links to see where they really go before clicking."];
+          ? "Confirm any request for money, payment changes or sign-in details by contacting the sender through a channel you already trust."
+          : "Check the sender's address and hover over links to see where they really go before clicking."];
     }
     return ["No specific action needed.", "Stay alert to unexpected requests for money, passwords or personal details."];
   }
@@ -275,29 +240,12 @@
     return !!node && node.getClientRects().length > 0;
   }
 
-  // The part of the reading area the user can actually see: Gmail's main region, intersected with
-  // every ancestor that clips or scrolls it and with the viewport. [role="main"] alone isn't enough:
-  // when it's tall content inside a separate scroller, its box extends above and below the visible
-  // pane, and a fixed-position overlay sized from it would float over the header or off-screen.
+  // The reading area is Gmail's main region; fall back to the viewport.
   function areaRect(anchor) {
-    const doc = document.documentElement;
-    let top = 0;
-    let left = 0;
-    let right = doc.clientWidth;
-    let bottom = doc.clientHeight;
-    const clip = r => {
-      top = Math.max(top, r.top);
-      left = Math.max(left, r.left);
-      right = Math.min(right, r.right);
-      bottom = Math.min(bottom, r.bottom);
-    };
-    const main = anchor?.closest?.('[role="main"]');
-    if (main) clip(main.getBoundingClientRect());
-    for (let el = anchor?.parentElement; el && el !== document.body && el !== doc; el = el.parentElement) {
-      const { overflowX, overflowY } = getComputedStyle(el);
-      if (overflowX !== "visible" || overflowY !== "visible") clip(el.getBoundingClientRect());
-    }
-    return { top, left, right, bottom, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+    const r = anchor?.closest?.('[role="main"]')?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0
+        ? r
+        : { top: 0, left: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
   }
 
   // Preferred badge spot: the subject row, right-aligned but left of any Gmail controls in that
@@ -318,7 +266,7 @@
       if (r.width && r.left >= textRight && r.bottom > s.top && r.top < s.bottom) right = Math.min(right, r.left - gap);
     }
     if (right - badgeW < textRight + gap) return null;
-    return { top: s.top + (s.height - badgeH) / 2, right, rowTop: s.top, rowBottom: s.bottom };
+    return { top: s.top + (s.height - badgeH) / 2, right };
   }
 
   let host = null;
@@ -382,31 +330,19 @@
     const rightLimit = area.right - 2 * gap; // clear of the reading area's scrollbar
     const bw = badge.offsetWidth;
     const bh = badge.offsetHeight;
-    // Visible pane too small for the badge (e.g. collapsed): hide it rather than draw it elsewhere.
-    parts.wrap.style.visibility = area.height >= bh + 2 * gap && area.width >= bw + 2 * gap ? "" : "hidden";
     const spot = subjectSpot(state.anchor, rightLimit, bw, bh, gap)
-      || { top: state.anchor.getBoundingClientRect().top, right: rightLimit };
-    // Centered on the subject row while that row is fully visible; once it scrolls out of the pane,
-    // pinned just inside the pane so it never floats over Gmail's header or off-screen.
-    const rowVisible = spot.rowTop !== undefined && spot.rowTop >= area.top - 1 && spot.rowBottom <= area.bottom + 1;
-    const top = rowVisible ? spot.top : Math.min(Math.max(spot.top, area.top + gap), area.bottom - bh - gap);
+        || { top: state.anchor.getBoundingClientRect().top, right: rightLimit };
+    const top = Math.min(Math.max(spot.top, area.top + gap), area.bottom - bh - gap);
     Object.assign(badge.style, { top: `${top}px`, right: `${viewW - spot.right}px` });
 
-    // Panel: about two-thirds of the pane's width, and a height that always fits inside the pane
-    // (up to 70% of it, more on short panes), moved up if needed so its bottom stays visible and its
-    // own scrollbar can reach the end of the content.
-    const width = Math.max(0, Math.min(640, area.width - 3 * gap, Math.max(area.width * 0.65, 300)));
-    const available = Math.max(0, area.height - 2 * gap);
-    const height = Math.min(available, Math.max(area.height * 0.7, 320));
-    const panelTop = Math.max(area.top + gap, Math.min(top, area.bottom - gap - height));
+    const width = Math.min(640, area.width - 3 * gap, Math.max(area.width * 0.65, 300));
+    const panelTop = Math.max(Math.min(top, area.bottom - 240), area.top + gap);
     Object.assign(panel.style, {
       top: `${panelTop}px`,
       right: `${viewW - rightLimit}px`,
       width: `${width}px`,
-      maxHeight: `${height}px`
+      maxHeight: `${Math.max(220, Math.min(area.bottom - panelTop - gap, area.height * 0.7))}px`
     });
-    // Short panes get a smaller logo so the sticky header leaves room for the content.
-    panel.classList.toggle("compact", height < 300);
   }
 
   // restoreFocus: false when the user dismissed by clicking elsewhere, so focus stays where they clicked.
@@ -431,8 +367,8 @@
     const { status, result } = state;
     if (status === "loading") {
       return state.aiEnabled
-        ? ["PhishGuard: scanning with AI review…", "PhishGuard is analyzing this email, including AI review"]
-        : ["PhishGuard: scanning…", "PhishGuard is analyzing this email"];
+          ? ["PhishGuard: scanning with AI review…", "PhishGuard is analyzing this email, including AI review"]
+          : ["PhishGuard: scanning…", "PhishGuard is analyzing this email"];
     }
     if (status === "error") return ["PhishGuard: analysis unavailable", "PhishGuard could not analyze this email. Show details"];
     const { score } = result;
@@ -475,24 +411,18 @@
     close.setAttribute("aria-label", "Close PhishGuard details");
     close.addEventListener("click", () => setExpanded(false));
     const logo = el("span", { className: "logo" });
-    // Falls back to the "P" mark when the image can't load (no extension context, or a reloaded
-    // extension invalidated it), so the panel always renders.
-    const fallback = () => { logo.replaceChildren(); logo.classList.add("fallback"); logo.textContent = "P"; };
-    const logoUrl = extensionUrl(LOGO_PATH);
-    if (logoUrl) {
-      const logoImg = el("img", { src: logoUrl, alt: "" });
+    const logoImg = el("img", {
+      src: chrome.runtime.getURL("prototype/PhishGuardLogo.png"),
+      alt: ""
+    });
 
-      logoImg.style.width = "70%";
-      logoImg.style.height = "70%";
-      logoImg.style.objectFit = "contain";
-      logoImg.style.maxWidth = "100%";
-      logoImg.style.maxHeight = "100%";
-      logoImg.addEventListener("error", fallback, { once: true });
+    logoImg.style.width = "70%";
+    logoImg.style.height = "70%";
+    logoImg.style.objectFit = "contain";
+    logoImg.style.maxWidth = "100%";
+    logoImg.style.maxHeight = "100%";
 
-      logo.appendChild(logoImg);
-    } else {
-      fallback();
-    }
+    logo.appendChild(logoImg);
     logo.setAttribute("aria-hidden", "true");
 
     return el("header", { className: "head" }, [
@@ -558,7 +488,7 @@
     }
 
     const signalNodes = groups.length
-      ? groups.map(g => {
+        ? groups.map(g => {
           const swatch = el("span", { className: "swatch", style: `background:${g.color}` });
           swatch.setAttribute("aria-hidden", "true");
           return el("div", { className: "group" }, [
@@ -567,7 +497,7 @@
             el("ul", {}, g.reasons.map(r => el("li", { textContent: r })))
           ]);
         })
-      : [el("p", { textContent: "No specific warning signals were found." })];
+        : [el("p", { textContent: "No specific warning signals were found." })];
     if (notes.length) signalNodes.push(el("ul", { className: "notes" }, notes.map(n => el("li", { textContent: n }))));
     sections.push(section("Detected signals", signalNodes));
 
@@ -649,20 +579,20 @@
     let guardTimer;
     const guard = new Promise(resolve => { guardTimer = setTimeout(() => resolve(null), ANALYSIS_TIMEOUT_MS); });
     const analysis = Promise.resolve()
-      .then(() => current.analyze())
-      .then(validResult)
-      .catch(() => null);
+        .then(() => current.analyze())
+        .then(validResult)
+        .catch(() => null);
     Promise.race([analysis, guard])
-      .then(result => {
-        clearTimeout(guardTimer);
-        if (state !== current) return;
-        current.status = result ? "done" : "error";
-        current.result = result;
-        render();
-        announce(result
-          ? `PhishGuard: ${HEADLINES[levelOf(result.score)][0]}, risk score ${result.score} percent.`
-          : "PhishGuard could not analyze this email.");
-      });
+        .then(result => {
+          clearTimeout(guardTimer);
+          if (state !== current) return;
+          current.status = result ? "done" : "error";
+          current.result = result;
+          render();
+          announce(result
+              ? `PhishGuard: ${HEADLINES[levelOf(result.score)][0]}, risk score ${result.score} percent.`
+              : "PhishGuard could not analyze this email.");
+        });
   }
 
   // Show the overlay for the email identified by key. Same key: just reposition.

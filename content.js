@@ -79,61 +79,12 @@
     }
   });
 
-  // Person 3's original auto-score card; used only if overlay.js isn't loaded.
-  function showScore(result){
-    let panel = document.getElementById("phishguard-auto-score");
-
-    if(!panel){
-      panel = document.createElement("div");
-      panel.id = "phishguard-auto-score";
-
-      Object.assign(panel.style, {
-        position: "fixed",
-        right: "20px",
-        bottom: "20px",
-        zIndex: "999999",
-        background: "#ffffff",
-        color: "#222222",
-        padding: "16px",
-        borderRadius: "12px",
-        boxShadow: "0 4px 18px rgba(0,0,0,0.2)",
-        fontFamily: "Arial, sans-serif",
-        width: "240px"
-      });
-
-      document.body.appendChild(panel);
-    }
-    const color = result.score >=60
-    ? "#dc2626"
-        : result.score >= 30
-            ? "#d97706"
-            : "#16a34a";
-    panel.replaceChildren();
-
-    const title = document.createElement("strong");
-    title.textContent = "PhishGuard Risk Score";
-    panel.appendChild(title);
-
-    const score = document.createElement("div");
-    score.textContent = `${result.score}/100`;
-    Object.assign(score.style, {
-      fontSize: "28px",
-      fontWeight: "bold",
-      color,
-      margin: "8px 0"
-    });
-    panel.appendChild(score);
-
-    const verdict = document.createElement("div");
-    verdict.textContent = result.verdict;
-    panel.appendChild(verdict);
-
-    result.reasons.forEach(reason => {
-      const item = document.createElement("p");
-      item.textContent = `• ${reason}`;
-      item.style.fontSize = "12px";
-      panel.appendChild(item);
-    });
+  // The overlay (overlay.js) is the only risk UI. Older builds drew a fixed "PhishGuard Risk
+  // Score" card; remove one left on the page by a stale copy of this script (Gmail tab not
+  // refreshed after the extension was updated).
+  const LEGACY_CARD_ID = "phishguard-auto-score";
+  function removeLegacyCard() {
+    document.getElementById(LEGACY_CARD_ID)?.remove();
   }
 
   // AI review is off until the user opts in from the popup (stored as aiReviewEnabled).
@@ -173,6 +124,7 @@
   let lastEmailKey = "";
 //automatically detects scams before user presses "analyze email" to give score
   function scanOpenEmail(){
+    removeLegacyCard();
     const overlay = window.PhishGuardOverlay;
     const message = findOpenMessage();
 
@@ -193,13 +145,11 @@
       return;
     }
 
-    if (key == lastEmailKey) return;
-    lastEmailKey = key;
-
-    if (!window.PhishGuardDetector) return;
-
-    const result = window.PhishGuardDetector.analyzeEmail(readOpenEmail());
-    showScore(result);
+    // No other UI: without the overlay there is nothing to show (the popup still works).
+    if (key !== lastEmailKey) {
+      lastEmailKey = key;
+      console.warn("PhishGuard: the overlay isn't loaded, so no risk badge is shown for this email.");
+    }
   }
 
   // Gmail mutates the DOM constantly; batch bursts into one scan.
