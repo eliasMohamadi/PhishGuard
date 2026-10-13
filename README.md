@@ -6,6 +6,8 @@ PhishGuard is a Chrome extension that helps users identify potentially malicious
 
 Built at Hacklanta (**with the help of 8 Red Bulls**), PhishGuard combines explainable risk scoring with an opt-in Google Gemini integration to help users understand *why* an email may be suspicious.
 
+🌐 Check out the landing page: www.gophish.biz
+
 # Toolbar Preview
 <img width="1794" height="897" alt="toolbarOverlay" src="https://github.com/user-attachments/assets/4668986e-4dac-4815-8fbe-1b95594f4f5a" />
 
