@@ -9,10 +9,10 @@ Built at Hacklanta (**with the help of 8 Red Bulls**), PhishGuard combines expla
 # Toolbar Preview
 <img width="1794" height="897" alt="toolbarOverlay" src="https://github.com/user-attachments/assets/4668986e-4dac-4815-8fbe-1b95594f4f5a" />
 
-# In Email UI
+# Phishing Email Detected
 <img width="1862" height="961" alt="emailUI" src="https://github.com/user-attachments/assets/bf7a9eb0-52d7-4ef7-88c5-262361a9aaea" />
 
-# Email Overlay
+# PhishGuard Detection Overlay
 <img width="1859" height="969" alt="emailOverlay" src="https://github.com/user-attachments/assets/f42124dc-9e06-4279-a63a-90610c48cbe2" />
 
 
